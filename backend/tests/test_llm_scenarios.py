@@ -6,7 +6,7 @@
 когда текст действительно переписывается.
 
 Запуск:
-    QA_LLM=1 backend/.venv/Scripts/python -m pytest tests/test_llm_scenarios.py -v
+    QA_LLM=1 backend/.venv/Scripts/python -X utf8 -m pytest tests/test_llm_scenarios.py -v
 
 Нужны LLM_BASE_URL и LLM_MODEL в .env и доступная модель по этому адресу.
 """

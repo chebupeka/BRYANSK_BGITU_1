@@ -23,8 +23,11 @@
 Автотесты (из каталога `backend`, зависимости по README):
 
 ```bash
-python -m pytest -q
+python -X utf8 -m pytest -q
 ```
+
+Флаг `-X utf8` нужен на Windows: без него русские сообщения об ошибках выводятся
+нечитаемыми, и понять причину падения невозможно.
 
 Отчёт и образцы документов для просмотра глазами (из корня репозитория):
 
@@ -134,7 +137,7 @@ backend/.venv/Scripts/python scripts/qa_report.py --out qa_samples
 для этого есть `test_llm_scenarios.py`:
 
 ```bash
-QA_LLM=1 python -m pytest tests/test_llm_scenarios.py -v
+QA_LLM=1 python -X utf8 -m pytest tests/test_llm_scenarios.py -v
 ```
 
 Набор пропускается, если не задан `QA_LLM=1`, если в ветке ещё нет режима `llm`
@@ -164,7 +167,7 @@ QA_LLM=1 python -m pytest tests/test_llm_scenarios.py -v
 
 ## Чек-лист перед защитой
 
-1. `python -m pytest -q` в каталоге `backend` — зелёный.
+1. `python -X utf8 -m pytest -q` в каталоге `backend` — зелёный.
 2. `backend/.venv/Scripts/python scripts/qa_report.py --out qa_samples` — черновиков с замечаниями 0.
 3. Восемь образцов документов открыты в Word, вёрстка проверена.
 4. Сценарии 1–6 пройдены руками через интерфейс, а не только тестами.
