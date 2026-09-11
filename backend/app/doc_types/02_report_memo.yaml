@@ -1,0 +1,13 @@
+id: report_memo
+name: Докладная записка
+description: Сообщение руководителю о ситуации и предлагаемых действиях.
+title: ДОКЛАДНАЯ ЗАПИСКА
+fields:
+  - { id: organization, label: Организация, required: true }
+  - { id: recipient, label: Кому, required: true }
+  - { id: sender, label: От кого, required: true }
+  - { id: subject, label: Тема, required: true }
+  - { id: date, label: Дата, required: true }
+  - { id: attachment, label: Приложение, required: false }
+  - { id: signer, label: Подписант, required: true }
+blocks: [organization, recipient, sender, title, date, subject, body, attachment, signer]

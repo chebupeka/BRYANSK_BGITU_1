@@ -1,0 +1,12 @@
+id: modern
+name: Компактный
+description: Arial 11 пт, интервал 1,15 и выравнивание слева.
+font: Arial
+font_size: 11
+margins_mm: { top: 25, right: 25, bottom: 25, left: 25 }
+line_spacing: 1.15
+paragraph_space_after_pt: 8
+first_line_indent_mm: 0
+title_alignment: left
+recipient_alignment: left
+body_alignment: left

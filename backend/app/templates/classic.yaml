@@ -1,0 +1,12 @@
+id: classic
+name: Классический
+description: Times New Roman 14 пт, интервал 1,5 и адресат справа.
+font: Times New Roman
+font_size: 14
+margins_mm: { top: 20, right: 15, bottom: 20, left: 30 }
+line_spacing: 1.5
+paragraph_space_after_pt: 0
+first_line_indent_mm: 12.5
+title_alignment: center
+recipient_alignment: right
+body_alignment: justify
