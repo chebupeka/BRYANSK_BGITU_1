@@ -155,7 +155,25 @@ def test_network_failure_becomes_explicit_error():
     response = prepared(processor)
     assert len(sent) == 1, "сетевой сбой не повторяется молча"
     assert response.status_code == 503
-    assert "Ollama" in response.json()["detail"]
+    assert "Нет связи с Ollama" in response.json()["detail"]
+
+
+def test_timeout_and_missing_model_are_told_apart():
+    slow, _ = scripted(error=httpx.ReadTimeout("too slow"))
+    assert "не ответила" in prepared(slow).json()["detail"]
+
+    def missing(request: httpx.Request) -> httpx.Response:
+        # Так отвечает Ollama: код 400, а не 404.
+        return httpx.Response(400, json={
+            "error": {"message": 'model "qwen2.5:7b-instruct" not found, try pulling it first'},
+        })
+
+    absent = LLMProcessor(
+        "http://ollama:11434/v1", "qwen2.5:7b-instruct",
+        client=httpx.Client(transport=httpx.MockTransport(missing)),
+    )
+    detail = prepared(absent).json()["detail"]
+    assert "ollama pull qwen2.5:7b-instruct" in detail
 
 
 def test_empty_body_from_model_is_refused():

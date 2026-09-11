@@ -204,6 +204,7 @@ class LLMProcessor:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._model = model
         self._api_key = api_key
+        self._timeout = timeout
         self._client = client or httpx.Client(timeout=timeout)
 
     def process(self, request: ProcessRequest, doc_type: DocumentType) -> ProcessorResult:
@@ -303,9 +304,27 @@ class LLMProcessor:
             response = self._client.post(self._url, json=payload, headers=headers)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
+        except httpx.TimeoutException as error:
+            # Разные причины — разные подсказки: иначе на демонстрации их не различить.
+            raise ProcessorUnavailable(
+                f"Модель не ответила за отведённое время ({self._timeout:.0f} с). "
+                "Черновик сохранён в форме: попробуйте ещё раз или возьмите модель меньше."
+            ) from error
+        except httpx.HTTPStatusError as error:
+            reason = server_error_text(error.response)
+            # Ollama отвечает на незагруженную модель кодом 400, а не 404: смотрим и на текст.
+            if error.response.status_code == 404 or "not found" in reason.lower():
+                raise ProcessorUnavailable(
+                    f"Модель «{self._model}» не загружена. Выполните «ollama pull {self._model}» "
+                    "или укажите другую модель в LLM_MODEL. Черновик сохранён в форме."
+                ) from error
+            raise ProcessorUnavailable(
+                f"Сервер модели ответил ошибкой {error.response.status_code}: {reason}. "
+                "Черновик сохранён в форме."
+            ) from error
         except httpx.HTTPError as error:
             raise ProcessorUnavailable(
-                "Модель недоступна: проверьте, что Ollama запущена и модель загружена. "
+                "Нет связи с Ollama по адресу из LLM_BASE_URL: проверьте, что она запущена. "
                 "Черновик сохранён в форме."
             ) from error
         except (KeyError, IndexError, TypeError, ValueError) as error:
@@ -317,6 +336,18 @@ class LLMProcessor:
                 "Модель вернула неожиданный ответ. Черновик сохранён в форме."
             )
         return content
+
+
+def server_error_text(response: httpx.Response) -> str:
+    """Сообщение сервера модели целиком не показываем, но причину отказа сохраняем."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text.strip()[:200]
+    error = payload.get("error", payload) if isinstance(payload, dict) else payload
+    if isinstance(error, dict):
+        error = error.get("message", "")
+    return str(error).strip()[:200]
 
 
 def build_messages(
