@@ -20,6 +20,8 @@ MAX_CHANGES = 10
 MAX_CHANGE_LENGTH = 200
 MAX_REQUISITE_LENGTH = 500  # совпадает с ShortText в schemas.py
 MAX_LISTED_FACTS = 5
+NAME_TAG = "имя "
+MIN_NAME_PREFIX = 5  # «иванов» и «иванову» — одно лицо, «иванов» и «иваненко» — разные
 
 CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 MONTHS = "январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр"
@@ -37,6 +39,60 @@ NAME = re.compile(
 )
 NAME_WORD = re.compile(r"[А-ЯЁ][а-яё]{2,}")
 NUMBER = re.compile(r"\d[\d\u00a0\u202f .,]*\d|\d")
+# Числа словами: «30 000 (тридцать тысяч) рублей» — обычная форма делового документа,
+# поэтому цифры и слова должны давать одно и то же сведение. Окончания перечислены явно:
+# совпадение по началу слова превратило бы «стоимость» в сто.
+WORD_NUMBERS: tuple[tuple[str, int], ...] = (
+    (r"миллиард\w*|млрд", 1_000_000_000),
+    (r"миллион\w*|млн", 1_000_000),
+    (r"тысяч\w*|тыс", 1_000),
+    (r"девятьсот|девятист\w+|девятьюст\w+", 900),
+    (r"восемьсот|восьмист\w+|восемьюст\w+", 800),
+    (r"семьсот|семист\w+|семьюст\w+", 700),
+    (r"шестьсот|шестист\w+|шестьюст\w+", 600),
+    (r"пятьсот|пятист\w+|пятьюст\w+", 500),
+    (r"четыреста|четыр[её]хсот|четыр[её]мст\w+", 400),
+    (r"триста|тр[её]хсот|тр[её]мст\w+|тремяст\w+", 300),
+    (r"двести|двухсот|двумст\w+|двумяст\w+", 200),
+    (r"сто|ста", 100),
+    (r"девяност[оа]", 90),
+    (r"восемьдесят|восьмидесяти|восемьюдесятью|восьмьюдесятью", 80),
+    (r"семьдесят|семидесяти|семьюдесятью", 70),
+    (r"шестьдесят|шестидесяти|шестьюдесятью", 60),
+    (r"пятьдесят|пятидесяти|пятьюдесятью", 50),
+    (r"сорок[а]?", 40),
+    (r"тридцат[ьию]|тридцатью", 30),
+    (r"двадцат[ьию]|двадцатью", 20),
+    (r"девятнадцат[ьию]|девятнадцатью", 19),
+    (r"восемнадцат[ьию]|восемнадцатью", 18),
+    (r"семнадцат[ьию]|семнадцатью", 17),
+    (r"шестнадцат[ьию]|шестнадцатью", 16),
+    (r"пятнадцат[ьию]|пятнадцатью", 15),
+    (r"четырнадцат[ьию]|четырнадцатью", 14),
+    (r"тринадцат[ьию]|тринадцатью", 13),
+    (r"двенадцат[ьию]|двенадцатью", 12),
+    (r"одиннадцат[ьию]|одиннадцатью", 11),
+    (r"десят[ьи]|десятью", 10),
+    (r"девят[ьи]|девятью", 9),
+    (r"восемь|восьми|вос[ье]мью", 8),
+    (r"семь|семи|семью", 7),
+    (r"шесть|шести|шестью", 6),
+    (r"пять|пяти|пятью", 5),
+    (r"четыре|четыр[её]х|четыр[её]м|четырьмя", 4),
+    (r"три|тр[её]х|тр[её]м|тремя", 3),
+    (r"два|две|двух|двум|двумя", 2),
+    (r"один|одна|одно|одного|одной|одному|одним|одну", 1),
+)
+WORD_NUMBER = re.compile(
+    "|".join(
+        rf"(?P<v{index}>\b(?:{pattern})\b)"
+        for index, (pattern, _) in enumerate(WORD_NUMBERS)
+    ),
+    re.IGNORECASE,
+)
+WORD_VALUES = {f"v{index}": value for index, (_, value) in enumerate(WORD_NUMBERS)}
+BETWEEN_WORDS = re.compile(r"^[\s-]*$")
+
 MONTH_PREFIXES = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "ма": 5, "июн": 6,
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
@@ -263,7 +319,12 @@ def build_messages(
     lines = []
     for requisite in doc_type.fields:
         value = answered.get(requisite.id, "")
-        state = f'указано пользователем: "{value}" — не меняй' if value else "не указано"
+        if value:
+            state = f'указано пользователем: "{value}" — не меняй'
+        elif requisite.summary:
+            state = "не указано; сформулируй кратко по смыслу черновика, без новых сведений"
+        else:
+            state = "не указано; заполни, только если названо в черновике прямо"
         need = "обязателен" if requisite.required else "необязателен"
         lines.append(f'- "{requisite.id}" — {requisite.label} ({need}); {state}')
     schema = (
@@ -282,8 +343,10 @@ def build_messages(
         "официальными формулировками, сохранив смысл условий.\n"
         "2. Раздели результат на абзацы и помести их в массив body. Заголовок документа "
         "и строки реквизитов в body не включай.\n"
-        "3. В requisites перенеси только значения, прямо названные в черновике; "
-        "для остальных оставь пустую строку.\n"
+        "3. В requisites перенеси значения по правилу из списка выше: тему сформулируй "
+        "сам, остальные поля заполняй только там, где они названы в черновике прямо. "
+        "Не выводи дату документа из срока и не назначай подписантом того, кто просто "
+        "упомянут в тексте. Где сведений нет, оставь пустую строку.\n"
         f"4. В changes перечисли до {MAX_CHANGES} коротких описаний правок, которые ты "
         "действительно внёс.\n\n"
         f"Ответь строго в таком виде:\n{schema}"
@@ -349,8 +412,11 @@ def extract_facts(*texts: str) -> set[str]:
         for match in NAME.finditer(without_dates):
             # Сравниваются слова, а не написание: «Иванов И. И.» короче «Иванова Ивана», но
             # не добавляет нового. Обратное — раскрытие инициалов — добавляет и будет видно.
-            facts.update(f"имя {word.lower()}" for word in NAME_WORD.findall(match.group()))
+            facts.update(
+                f"{NAME_TAG}{word.lower()}" for word in NAME_WORD.findall(match.group())
+            )
         without_names = NAME.sub(" ", without_dates)
+        facts.update(f"число {value}" for value in word_numbers(without_names))
         for match in NUMBER.finditer(without_names):
             digits = re.sub(r"\D", "", match.group())
             if len(digits) < 2 and is_list_marker(without_names, match):
@@ -360,11 +426,50 @@ def extract_facts(*texts: str) -> set[str]:
     return facts
 
 
+def word_numbers(text: str) -> set[int]:
+    """«тридцать тысяч» -> 30000. Соседние слова складываются в одно число, как в речи."""
+    found: set[int] = set()
+    total = group = 0
+    previous_end = -1
+    for match in WORD_NUMBER.finditer(text):
+        value = WORD_VALUES[match.lastgroup]
+        if previous_end >= 0 and not BETWEEN_WORDS.match(text[previous_end : match.start()]):
+            found.add(total + group)
+            total = group = 0
+        if value >= 1000:
+            total += (group or 1) * value
+            group = 0
+        else:
+            group += value
+        previous_end = match.end()
+    if previous_end >= 0:
+        found.add(total + group)
+    # Одиночные «один» и «ноль» — обороты речи, а не сведения документа.
+    return {number for number in found if number >= 2}
+
+
 def unconfirmed_facts(texts: list[str], confirmed: set[str]) -> list[str]:
-    invented = sorted(extract_facts(*texts) - confirmed)
+    known_names = [fact[len(NAME_TAG):] for fact in confirmed if fact.startswith(NAME_TAG)]
+    invented = []
+    for fact in sorted(extract_facts(*texts) - confirmed):
+        if fact.startswith(NAME_TAG):
+            name = fact[len(NAME_TAG):]
+            # Деловой текст склоняет фамилии: «Иванову И. И.» — тот же человек, а не новый.
+            if any(same_name(name, known) for known in known_names):
+                continue
+        invented.append(fact)
     if len(invented) > MAX_LISTED_FACTS:
         return [*invented[:MAX_LISTED_FACTS], "…"]
     return invented
+
+
+def same_name(first: str, second: str) -> bool:
+    shared = 0
+    for left, right in zip(first, second):
+        if left != right:
+            break
+        shared += 1
+    return shared >= MIN_NAME_PREFIX and shared >= min(len(first), len(second)) - 2
 
 
 def is_list_marker(text: str, match: re.Match[str]) -> bool:

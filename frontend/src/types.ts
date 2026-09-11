@@ -2,6 +2,8 @@ export interface RequisiteField {
   id: string;
   label: string;
   required: boolean;
+  // Тема: обработчик формулирует её сам; остальные реквизиты берутся только из черновика.
+  summary?: boolean;
 }
 
 export interface DocumentType {

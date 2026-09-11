@@ -4,7 +4,7 @@ description: Сведения по конкретному вопросу и на
 title: ИНФОРМАЦИОННАЯ СПРАВКА
 fields:
   - { id: organization, label: Организация, required: true }
-  - { id: subject, label: О чём справка, required: true }
+  - { id: subject, label: О чём справка, required: true, summary: true }
   - { id: date, label: Дата, required: true }
   - { id: purpose, label: Назначение справки, required: true }
   - { id: signer, label: Подписант, required: true }

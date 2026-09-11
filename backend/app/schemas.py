@@ -24,6 +24,9 @@ class RequisiteField(Contract):
     id: Identifier
     label: str
     required: bool = False
+    # Тема документа — краткая формулировка по смыслу черновика, а не цитата из него.
+    # Остальные реквизиты обработчик берёт только там, где они названы прямо.
+    summary: bool = False
 
 
 class DocumentType(Contract):

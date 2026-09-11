@@ -5,7 +5,7 @@ title: СЛУЖЕБНАЯ ЗАПИСКА
 fields:
   - { id: recipient, label: Кому, required: true }
   - { id: sender, label: От кого, required: true }
-  - { id: subject, label: Тема, required: true }
+  - { id: subject, label: Тема, required: true, summary: true }
   - { id: date, label: Дата, required: true }
   - { id: signer, label: Подписант, required: true }
 blocks: [recipient, sender, title, subject, body, date, signer]

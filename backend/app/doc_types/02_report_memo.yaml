@@ -6,7 +6,7 @@ fields:
   - { id: organization, label: Организация, required: true }
   - { id: recipient, label: Кому, required: true }
   - { id: sender, label: От кого, required: true }
-  - { id: subject, label: Тема, required: true }
+  - { id: subject, label: Тема, required: true, summary: true }
   - { id: date, label: Дата, required: true }
   - { id: attachment, label: Приложение, required: false }
   - { id: signer, label: Подписант, required: true }

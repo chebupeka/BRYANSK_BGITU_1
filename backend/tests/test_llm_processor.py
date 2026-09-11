@@ -11,6 +11,7 @@ from app.processing import (
     extract_facts,
     get_processor,
     unconfirmed_facts,
+    word_numbers,
 )
 from app.schemas import ProcessRequest
 from app.settings import Settings
@@ -213,3 +214,26 @@ def test_space_is_a_thousands_separator_inside_one_number():
     # «30 000» и «30000» — одно число; поэтому соседние числа через пробел склеиваются.
     assert extract_facts("30 000 рублей") == extract_facts("30000 рублей")
     assert extract_facts("15 000 25 000") == {"число 1500025000"}
+
+
+def test_amount_in_words_matches_the_same_amount_in_digits():
+    assert not unconfirmed_facts(["30 000 рублей"], extract_facts("тридцать тысяч рублей"))
+    assert not unconfirmed_facts(
+        ["30 000 (тридцать тысяч) рублей"], extract_facts("Нужно 30000 рублей")
+    )
+    assert unconfirmed_facts(
+        ["сорок пять тысяч рублей"], extract_facts("Нужно 30 000 рублей")
+    ) == ["число 45000"]
+
+
+def test_ordinary_words_are_not_read_as_numbers():
+    assert word_numbers("стоимость семинара у двери стать") == set()
+    assert word_numbers("один из вариантов") == set(), "одиночная единица — оборот речи"
+    assert word_numbers("две тысячи двадцать шесть") == {2026}
+    assert word_numbers("сто пятьдесят") == {150}
+
+
+def test_declined_surname_is_the_same_person():
+    confirmed = extract_facts("Иванов И. И. согласовал заявку")
+    assert not unconfirmed_facts(["Направить Иванову И. И. для исполнения."], confirmed)
+    assert unconfirmed_facts(["Направить Иваненко И. И."], confirmed) == ["имя иваненко"]

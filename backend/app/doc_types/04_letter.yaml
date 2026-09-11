@@ -7,7 +7,7 @@ fields:
   - { id: recipient, label: Адресат, required: true }
   - { id: date, label: Дата, required: true }
   - { id: number, label: Исходящий номер, required: true }
-  - { id: subject, label: Тема, required: true }
+  - { id: subject, label: Тема, required: true, summary: true }
   - { id: attachment, label: Приложение, required: false }
   - { id: signer, label: Подписант, required: true }
 blocks: [organization, recipient, title, date, number, subject, body, attachment, signer]
