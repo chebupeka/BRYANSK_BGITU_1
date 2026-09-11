@@ -3,9 +3,12 @@ name: Информационная справка
 description: Сведения по конкретному вопросу и назначение справки.
 title: ИНФОРМАЦИОННАЯ СПРАВКА
 fields:
-  - { id: organization, label: Организация, required: true }
-  - { id: subject, label: О чём справка, required: true }
-  - { id: date, label: Дата, required: true }
+  - { id: organization, label: Организация, required: true, placement: letterhead }
+  - { id: department, label: Структурное подразделение, placement: letterhead }
+  - { id: subject, label: О чём справка, required: true, placement: headline }
+  - { id: date, label: Дата, required: true, placement: registration }
+  - { id: number, label: Номер, placement: registration, prefix: "№ " }
   - { id: purpose, label: Назначение справки, required: true }
-  - { id: signer, label: Подписант, required: true }
-blocks: [organization, title, date, subject, body, purpose, signer]
+  - { id: signer_position, label: Должность подписанта, placement: signature }
+  - { id: signer, label: Подписант, required: true, placement: signature }
+blocks: [organization, department, title, date, number, subject, body, purpose, signer_position, signer]

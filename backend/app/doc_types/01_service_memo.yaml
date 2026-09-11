@@ -3,9 +3,14 @@ name: Служебная записка
 description: Запрос или рабочее обращение внутри организации.
 title: СЛУЖЕБНАЯ ЗАПИСКА
 fields:
-  - { id: recipient, label: Кому, required: true }
-  - { id: sender, label: От кого, required: true }
-  - { id: subject, label: Тема, required: true }
-  - { id: date, label: Дата, required: true }
-  - { id: signer, label: Подписант, required: true }
-blocks: [recipient, sender, title, subject, body, date, signer]
+  - { id: organization, label: Организация, placement: letterhead }
+  - { id: department, label: Структурное подразделение, placement: letterhead }
+  - { id: recipient, label: Кому, required: true, placement: addressee }
+  - { id: sender, label: От кого, required: true, placement: addressee }
+  - { id: subject, label: Тема, required: true, placement: headline }
+  - { id: date, label: Дата, required: true, placement: registration }
+  - { id: number, label: Номер, placement: registration, prefix: "№ " }
+  - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }
+  - { id: signer_position, label: Должность подписанта, placement: signature }
+  - { id: signer, label: Подписант, required: true, placement: signature }
+blocks: [organization, department, recipient, sender, title, date, number, subject, body, attachment, signer_position, signer]
