@@ -10,14 +10,13 @@ Alignment = Literal["left", "center", "right", "justify"]
 # Where a requisite goes in the DOCX. Neighbouring fields with the same placement form one block.
 Placement = Literal[
     "labeled",  # «Подпись поля: значение» — for requisites without a standard position
-    "letterhead",  # organization and subdivision at the top of the page
-    "letterhead_details",  # address, phone, e-mail under the organization, smaller font
-    "addressee",  # block in the upper right corner, one paragraph per field
-    "registration",  # one line: «11.09.2026 № 01-12/345»
-    "reference",  # one line: «На № 15 от 01.09.2026»
+    "letterhead",  # organization: page header or the top of the page, see Template.header
+    "addressee",  # «кому» / «от кого»: corner block or table, see Template.recipient_layout
+    "registration",  # one line: «11.09.2026 № 47-СЗ»
     "headline",  # heading to the text: «О закупке мониторов»
+    "salutation",  # «Уважаемый Иван Иванович!» before the text
     "paragraph",  # separate paragraph after the text, e.g. «Приложение: …»
-    "signature",  # one line: position on the left, name on the right
+    "signature",  # position and name, see Template.signature_alignment
     "executor",  # executor and phone at the end, smaller font
 ]
 
@@ -47,7 +46,7 @@ class DocumentType(Contract):
     name: str
     description: str
     title: str
-    # Official letters have no document type name on the page.
+    # Whether the document type name («СЛУЖЕБНАЯ ЗАПИСКА») is printed on the page.
     show_title: bool = True
     fields: list[RequisiteField]
     blocks: list[str]
@@ -63,17 +62,24 @@ class Template(Contract):
     line_spacing: float = Field(ge=1, le=2)
     paragraph_space_after_pt: float = Field(ge=0, le=24)
     first_line_indent_mm: float = Field(ge=0, le=20)
+    # Also used for the salutation of a letter.
     title_alignment: Alignment
     # right: addressee block in the right part of the page; left/center: block alignment.
     recipient_alignment: Alignment
     body_alignment: Alignment
+    signature_alignment: Alignment = "left"
+    # block: addressee lines as paragraphs; table: two columns «Кому | значение».
+    recipient_layout: Literal["block", "table"] = "block"
+    # organization: letterhead fields go to the page header on every page.
+    header: Literal["none", "organization"] = "none"
+    # title_and_date: «Служебная записка от 11.09.2026».
+    footer: Literal["none", "page_number", "title_and_date"] = "none"
+    header_footer_font_size: float = Field(default=10, ge=8, le=14)
     letterhead_alignment: Alignment = "center"
     headline_alignment: Alignment = "left"
     headline_bold: bool = False
     addressee_width_mm: float = Field(default=80, ge=50, le=120)
     small_font_size: float = Field(default=10, ge=8, le=14)
-    # Page numbers at the top center starting from the second page.
-    page_numbers: bool = True
 
 
 class Catalog(Contract):

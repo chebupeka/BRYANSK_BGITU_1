@@ -4,13 +4,13 @@ description: Запрос или рабочее обращение внутри 
 title: СЛУЖЕБНАЯ ЗАПИСКА
 fields:
   - { id: organization, label: Организация, placement: letterhead }
-  - { id: department, label: Структурное подразделение, placement: letterhead }
   - { id: recipient, label: Кому, required: true, placement: addressee }
   - { id: sender, label: От кого, required: true, placement: addressee }
   - { id: subject, label: Тема, required: true, placement: headline }
   - { id: date, label: Дата, required: true, placement: registration }
-  - { id: number, label: Номер, placement: registration, prefix: "№ " }
+  - { id: number, label: Номер, required: true, placement: registration, prefix: "№ " }
   - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }
   - { id: signer_position, label: Должность подписанта, placement: signature }
   - { id: signer, label: Подписант, required: true, placement: signature }
-blocks: [organization, department, recipient, sender, title, date, number, subject, body, attachment, signer_position, signer]
+  - { id: executor, label: Исполнитель, placement: executor }
+blocks: [organization, recipient, sender, title, date, number, subject, body, attachment, signer_position, signer, executor]

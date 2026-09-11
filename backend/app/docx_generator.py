@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass, field
 from io import BytesIO
 
@@ -20,30 +19,15 @@ ALIGNMENTS = {
 PAGE_WIDTH_MM = 210
 PAGE_HEIGHT_MM = 297
 LANGUAGE = "ru-RU"
-NBSP = "\u00a0"
+# Width of the label column in the «Кому / От кого» table.
+TABLE_LABEL_WIDTH_MM = 35
 # Word prefers theme font attributes over explicit names, so they must be removed.
 THEME_FONT_ATTRS = ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme")
 FONT_ATTRS = ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs")
-SIGN_BEFORE_NUMBER = re.compile(r"([№§]) (?=\d)")
-GROUPED_NUMBER = re.compile(r"(?<!\d)(?<!\d )\d{1,3}(?: \d{3})+(?!\d)")
 
 # Requisites printed as compact blocks with single line spacing.
-COMPACT = {
-    "letterhead", "letterhead_details", "addressee", "registration", "reference",
-    "headline", "signature", "executor",
-}
-# Pairs of blocks that visually belong together and need no gap between them.
-ATTACHED = {("letterhead", "letterhead_details"), ("registration", "reference")}
+COMPACT = {"letterhead", "addressee", "registration", "headline", "signature", "executor"}
 WIDE_GAP = {"signature", "executor"}
-
-
-def keep_together(text: str) -> str:
-    """Replace spaces that must not break a line: «№ 214», «30 000».
-
-    Letters, digits and punctuation stay unchanged; only the kind of space differs.
-    """
-    text = SIGN_BEFORE_NUMBER.sub(rf"\1{NBSP}", text)
-    return GROUPED_NUMBER.sub(lambda match: match.group(0).replace(" ", NBSP), text)
 
 
 def set_fonts(rpr, font: str) -> None:
@@ -99,17 +83,20 @@ def apply_styles(doc, template: Template) -> None:
     title.paragraph_format.space_after = Pt(12)
     title.paragraph_format.keep_with_next = True
 
+    for name in ("Header", "Footer"):
+        style = doc.styles[name]
+        set_fonts(style.element.get_or_add_rPr(), template.font)
+        style.font.size = Pt(template.header_footer_font_size)
+        style.paragraph_format.line_spacing = 1
+        style.paragraph_format.space_after = Pt(0)
 
-def add_page_numbers(section) -> None:
-    """Page number at the top center, starting from the second page."""
-    section.different_first_page_header_footer = True
-    paragraph = section.header.paragraphs[0]
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+def add_page_number(paragraph) -> None:
     page_field = OxmlElement("w:fldSimple")
     page_field.set(qn("w:instr"), "PAGE")
     run = OxmlElement("w:r")
     text = OxmlElement("w:t")
-    text.text = "2"
+    text.text = "1"
     run.append(text)
     page_field.append(run)
     paragraph._p.append(page_field)
@@ -141,9 +128,7 @@ def arrange_blocks(content: DocumentContent, doc_type: DocumentType) -> list[Blo
 
 
 def requisite_text(requisite: RequisiteField, value: str) -> str:
-    if not value:
-        return f"{requisite.prefix}[Заполнить: {requisite.label}]"
-    return keep_together(requisite.prefix + value)
+    return requisite.prefix + (value or f"[Заполнить: {requisite.label}]")
 
 
 class Writer:
@@ -156,12 +141,13 @@ class Writer:
         self.text_width_mm = PAGE_WIDTH_MM - margins["left"] - margins["right"]
         self.gap = Pt(template.font_size)
 
-    def paragraph(self, text: str = "", alignment: str = "left"):
-        paragraph = self.doc.add_paragraph(text)
+    def paragraph(self, text: str = "", alignment: str = "left", container=None):
+        paragraph = (container or self.doc).add_paragraph(text)
         paragraph.alignment = ALIGNMENTS[alignment]
         return paragraph
 
-    def write(self, block: Block) -> list:
+    def write(self, block: Block) -> list | None:
+        """Add a block to the page body. None means the block went to the page header."""
         template = self.template
         texts = [requisite_text(requisite, value) for requisite, value in block.items]
         if block.kind == "title":
@@ -171,18 +157,21 @@ class Writer:
         if block.kind == "body":
             paragraphs = []
             for text in self.content.body:
-                paragraph = self.paragraph(keep_together(text), template.body_alignment)
+                paragraph = self.paragraph(text, template.body_alignment)
                 paragraph.paragraph_format.first_line_indent = Mm(template.first_line_indent_mm)
                 paragraphs.append(paragraph)
             return paragraphs
-        if block.kind in {"letterhead", "letterhead_details"}:
-            paragraphs = [self.paragraph(text, template.letterhead_alignment) for text in texts]
-            if block.kind == "letterhead_details":
-                self.set_small_font(paragraphs)
-            return paragraphs
+        if block.kind == "letterhead":
+            if template.header == "organization":
+                self.write_header(texts)
+                return None
+            return [self.paragraph(text, template.letterhead_alignment) for text in texts]
         if block.kind == "addressee":
+            if template.recipient_layout == "table":
+                self.addressee_table(block)
+                return []
             return [self.addressee(text) for text in texts]
-        if block.kind in {"registration", "reference"}:
+        if block.kind == "registration":
             return [self.paragraph(" ".join(texts))]
         if block.kind == "headline":
             paragraph = self.paragraph(" ".join(texts), template.headline_alignment)
@@ -190,15 +179,40 @@ class Writer:
             for run in paragraph.runs:
                 run.bold = template.headline_bold
             return [paragraph]
+        if block.kind == "salutation":
+            return [self.paragraph(text, template.title_alignment) for text in texts]
         if block.kind == "signature":
-            return [self.signature(texts)]
+            return self.signature(texts)
         if block.kind == "executor":
             paragraphs = [self.paragraph(text) for text in texts]
-            self.set_small_font(paragraphs)
+            for paragraph in paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(template.small_font_size)
             return paragraphs
         if block.kind == "paragraph":
             return [self.paragraph(text) for text in texts]
         return [self.labeled(requisite, value) for requisite, value in block.items]
+
+    def write_header(self, texts: list[str]) -> None:
+        header = self.doc.sections[0].header
+        first = header.paragraphs[0]
+        first.text = texts[0]
+        first.alignment = ALIGNMENTS[self.template.letterhead_alignment]
+        for text in texts[1:]:
+            self.paragraph(text, self.template.letterhead_alignment, container=header)
+
+    def write_footer(self) -> None:
+        template = self.template
+        if template.footer == "none":
+            return
+        paragraph = self.doc.sections[0].footer.paragraphs[0]
+        if template.footer == "page_number":
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            add_page_number(paragraph)
+            return
+        date = self.content.requisites.get("date", "").strip()
+        paragraph.text = f"{self.doc_type.name} от {date}" if date else self.doc_type.name
+        paragraph.alignment = ALIGNMENTS[template.letterhead_alignment]
 
     def addressee(self, text: str):
         alignment = self.template.recipient_alignment
@@ -210,28 +224,42 @@ class Writer:
             return paragraph
         return self.paragraph(text, alignment)
 
-    def signature(self, texts: list[str]):
-        # Position on the left, name at the right margin: «Заведующий   И. И. Иванов».
-        left, right = " ".join(texts[:-1]), texts[-1]
-        paragraph = self.paragraph(f"{left}\t{right}")
-        paragraph.paragraph_format.tab_stops.add_tab_stop(
-            Mm(self.text_width_mm), WD_TAB_ALIGNMENT.RIGHT
-        )
-        return paragraph
+    def addressee_table(self, block: Block) -> None:
+        """Two columns: «Кому | Руководителю…», «От кого | …»."""
+        table = self.doc.add_table(rows=0, cols=2)
+        table.style = "Table Grid"
+        table.autofit = False
+        widths = (Mm(TABLE_LABEL_WIDTH_MM), Mm(self.text_width_mm - TABLE_LABEL_WIDTH_MM))
+        for column, width in zip(table.columns, widths, strict=True):
+            column.width = width
+        for requisite, value in block.items:
+            cells = table.add_row().cells
+            cells[0].paragraphs[0].add_run(requisite.label).bold = True
+            cells[1].paragraphs[0].add_run(requisite_text(requisite, value))
+            for cell, width in zip(cells, widths, strict=True):
+                cell.width = width
+                cell.paragraphs[0].paragraph_format.line_spacing = 1
+                cell.paragraphs[0].paragraph_format.space_after = Pt(0)
+
+    def signature(self, texts: list[str]) -> list:
+        alignment = self.template.signature_alignment
+        if alignment == "left" and len(texts) > 1:
+            # Position on the left, name at the right margin: «Заведующий   И. И. Иванов».
+            paragraph = self.paragraph(f"{' '.join(texts[:-1])}\t{texts[-1]}")
+            paragraph.paragraph_format.tab_stops.add_tab_stop(
+                Mm(self.text_width_mm), WD_TAB_ALIGNMENT.RIGHT
+            )
+            return [paragraph]
+        return [self.paragraph(text, alignment) for text in texts]
 
     def labeled(self, requisite: RequisiteField, value: str):
         paragraph = self.paragraph()
         paragraph.add_run(f"{requisite.label}: ").bold = True
-        paragraph.add_run(keep_together(value) if value else f"[Заполнить: {requisite.label}]")
+        paragraph.add_run(value or f"[Заполнить: {requisite.label}]")
         return paragraph
 
-    def set_small_font(self, paragraphs: list) -> None:
-        for paragraph in paragraphs:
-            for run in paragraph.runs:
-                run.font.size = Pt(self.template.small_font_size)
-
     def space_before(self, kind: str, previous: str | None):
-        if previous is None or previous == "title" or (previous, kind) in ATTACHED:
+        if previous is None or previous == "title":
             return Pt(0)
         return self.gap * 2 if kind in WIDE_GAP else self.gap
 
@@ -247,18 +275,23 @@ def generate_docx(content: DocumentContent, doc_type: DocumentType, template: Te
     section.page_width, section.page_height = Mm(PAGE_WIDTH_MM), Mm(PAGE_HEIGHT_MM)
     for side, value in template.margins_mm.items():
         setattr(section, f"{side}_margin", Mm(value))
+    # Header and footer sit in the middle of the margin, not glued to the text.
+    section.header_distance = Mm(template.margins_mm["top"] / 2)
+    section.footer_distance = Mm(template.margins_mm["bottom"] / 2)
     apply_styles(doc, template)
-    if template.page_numbers:
-        add_page_numbers(section)
 
     writer = Writer(doc, template, doc_type, content)
+    writer.write_footer()
     previous, previous_last = None, None
     for block in arrange_blocks(content, doc_type):
         paragraphs = writer.write(block)
-        if block.kind != "title":
+        if paragraphs is None:
+            continue
+        if paragraphs and block.kind != "title":
             paragraphs[0].paragraph_format.space_before = writer.space_before(block.kind, previous)
-        if (previous, block.kind) in ATTACHED:
-            previous_last.paragraph_format.space_after = Pt(0)
+        if not paragraphs and previous_last is not None:
+            # A table cannot have a gap above it, so the paragraph before it gets one below.
+            previous_last.paragraph_format.space_after = writer.gap
         if block.kind == "signature" and previous_last is not None:
             # The signature must not be alone on a page.
             previous_last.paragraph_format.keep_with_next = True
@@ -269,7 +302,8 @@ def generate_docx(content: DocumentContent, doc_type: DocumentType, template: Te
                 paragraph.paragraph_format.line_spacing = 1
             for paragraph in paragraphs[:-1]:
                 paragraph.paragraph_format.space_after = inner_gap
-        previous, previous_last = block.kind, paragraphs[-1]
+        previous = block.kind
+        previous_last = paragraphs[-1] if paragraphs else None
 
     output = BytesIO()
     doc.save(output)

@@ -2,19 +2,15 @@ id: letter
 name: Письмо
 description: Официальное обращение к внешнему адресату.
 title: ПИСЬМО
-# По ГОСТ Р 7.0.97-2016 наименование вида документа на письме не указывается.
-show_title: false
 fields:
   - { id: organization, label: Организация отправителя, required: true, placement: letterhead }
-  - { id: organization_details, label: Адрес и контакты отправителя, placement: letterhead_details }
   - { id: recipient, label: Адресат, required: true, placement: addressee }
   - { id: date, label: Дата, required: true, placement: registration }
   - { id: number, label: Исходящий номер, required: true, placement: registration, prefix: "№ " }
-  - { id: reply_number, label: Номер входящего письма, placement: reference, prefix: "На № " }
-  - { id: reply_date, label: Дата входящего письма, placement: reference, prefix: "от " }
   - { id: subject, label: Тема, required: true, placement: headline }
+  - { id: salutation, label: Обращение, placement: salutation }
   - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }
   - { id: signer_position, label: Должность подписанта, placement: signature }
   - { id: signer, label: Подписант, required: true, placement: signature }
-  - { id: executor, label: Исполнитель и телефон, placement: executor }
-blocks: [organization, organization_details, title, date, number, reply_number, reply_date, recipient, subject, body, attachment, signer_position, signer, executor]
+  - { id: executor, label: Исполнитель, placement: executor }
+blocks: [organization, date, number, recipient, title, subject, salutation, body, attachment, signer_position, signer, executor]

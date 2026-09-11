@@ -8,7 +8,7 @@ from app.schemas import DocumentType, Template
 BASE = Path(__file__).resolve().parent
 PAGE_WIDTH_MM = 210
 # Fields of these placements are merged into one block, so they must stand together in blocks.
-CONTIGUOUS_PLACEMENTS = {"addressee", "registration", "reference", "signature"}
+CONTIGUOUS_PLACEMENTS = {"letterhead", "addressee", "registration", "signature"}
 
 
 def check_contiguous_placements(item: DocumentType, filename: str) -> None:
