@@ -4,6 +4,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.catalog import document_types
 from app.main import create_app
 from app.processing import (
     LLMProcessor,
@@ -191,8 +192,6 @@ def test_llm_mode_requires_model_name():
 
 def test_messages_include_system_rules_and_schema():
     request = ProcessRequest(doc_type="service_memo", draft=DRAFT, requisites={})
-    from app.catalog import document_types
-
     messages = build_messages(request, document_types()["service_memo"], {})
     assert messages[0]["role"] == "system"
     assert "Запрещено добавлять" in messages[0]["content"]
@@ -298,3 +297,38 @@ def test_model_cannot_claim_edits_it_did_not_make():
     }, ensure_ascii=False)
     processor, _ = scripted(boastful)
     assert prepared(processor).json()["changes"] == [], "текст не менялся, значит правок нет"
+
+
+def test_same_draft_is_not_sent_to_the_model_twice():
+    processor, sent = scripted(CLEAN_REPLY)
+    first = prepared(processor).json()
+    second = prepared(processor).json()
+    assert len(sent) == 1, "повторная подготовка берётся из кэша"
+    assert first["document"] == second["document"]
+
+
+def test_changed_answers_are_prepared_again():
+    processor, sent = scripted(CLEAN_REPLY, CLEAN_REPLY)
+    prepared(processor)
+    prepared(processor, {"recipient": "Директору"})
+    assert len(sent) == 2, "другие реквизиты — другая подготовка"
+
+
+def test_request_asks_to_keep_the_model_loaded():
+    processor, sent = scripted(CLEAN_REPLY)
+    prepared(processor)
+    assert sent[0]["keep_alive"] == "30m"
+    assert sent[0]["seed"] == 0
+
+
+def test_cache_returns_a_copy_that_cannot_be_spoiled():
+    processor, sent = scripted(CLEAN_REPLY)
+    request = ProcessRequest(doc_type="service_memo", draft=DRAFT, requisites={})
+    doc_type = document_types()["service_memo"]
+    first = processor.process(request, doc_type)
+    first.document.body.append("Приписка мимо модели.")
+    first.warnings.append("чужое предупреждение")
+    second = processor.process(request, doc_type)
+    assert len(sent) == 1
+    assert "Приписка мимо модели." not in second.document.body
+    assert second.warnings == []

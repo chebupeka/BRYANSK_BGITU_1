@@ -8,6 +8,8 @@ Ollama. Ответ модели проверяется схемой и неза�
 import difflib
 import json
 import re
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -22,6 +24,8 @@ MAX_CHANGE_LENGTH = 200
 MAX_REQUISITE_LENGTH = 500  # совпадает с ShortText в schemas.py
 MAX_LISTED_FACTS = 5
 MAX_NUMBER_DIGITS = 15  # длиннее — это склеенный список, а не сведение
+MODEL_KEEP_ALIVE = "30m"  # чтобы модель не выгружалась между шагами показа
+CACHE_SIZE = 16  # небольшой кэш подготовки: возврат на шаг назад не ждёт модель заново
 NAME_TAG = "имя "
 MIN_NAME_PREFIX = 5  # «иванов» и «иванову» — одно лицо, «иванов» и «иваненко» — разные
 
@@ -149,6 +153,15 @@ class ProcessorResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def copy_result(result: ProcessorResult) -> ProcessorResult:
+    """Отдельный экземпляр результата: кэш и вызывающий код не делят изменяемые списки."""
+    return ProcessorResult(
+        document=result.document.model_copy(deep=True),
+        changes=list(result.changes),
+        warnings=list(result.warnings),
+    )
+
+
 class TextProcessor(Protocol):
     """Граница обработки текста: заглушка, отказ или адаптер модели."""
 
@@ -211,9 +224,15 @@ class LLMProcessor:
         self._api_key = api_key
         self._timeout = timeout
         self._client = client or httpx.Client(timeout=timeout)
+        self._cache: OrderedDict[tuple, ProcessorResult] = OrderedDict()
+        self._lock = threading.Lock()
 
     def process(self, request: ProcessRequest, doc_type: DocumentType) -> ProcessorResult:
         answered = {key: value for key, value in request.requisites.items() if value.strip()}
+        key = (request.doc_type, request.draft, tuple(sorted(answered.items())))
+        cached = self.cached(key)
+        if cached is not None:
+            return cached
         # Факты извлекаются из источника отдельно от модели: сверять ответ с самим ответом нельзя.
         confirmed = extract_facts(request.draft, *answered.values())
         messages = build_messages(request, doc_type, answered)
@@ -240,7 +259,25 @@ class LLMProcessor:
                 "Модель не вернула корректный ответ даже после повтора. "
                 "Черновик сохранён в форме, попробуйте ещё раз."
             )
-        return self._build(request, doc_type, reply, answered, confirmed)
+        result = self._build(request, doc_type, reply, answered, confirmed)
+        self.remember(key, result)
+        return result
+
+    def cached(self, key: tuple) -> ProcessorResult | None:
+        with self._lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            stored = self._cache[key]
+        return copy_result(stored)
+
+    def remember(self, key: tuple, result: ProcessorResult) -> None:
+        # Оформление в ключ не входит: смена шаблона не трогает обработчик вовсе.
+        # Хранится копия: вызывающий код держит ссылку на возвращённый результат.
+        with self._lock:
+            self._cache[key] = copy_result(result)
+            while len(self._cache) > CACHE_SIZE:
+                self._cache.popitem(last=False)
 
     def _build(
         self,
@@ -306,8 +343,11 @@ class LLMProcessor:
             "model": self._model,
             "messages": messages,
             "stream": False,
-            # Ноль ради повторяемости: один и тот же черновик даёт один и тот же документ.
+            # Ноль и постоянное зерно ради повторяемости: один черновик — один документ.
             "temperature": 0,
+            "seed": 0,
+            # Ollama выгружает модель через пять минут простоя; на показе это лишняя пауза.
+            "keep_alive": MODEL_KEEP_ALIVE,
             # Ollama переводит это в строгий JSON-режим; схему всё равно проверяет Pydantic.
             "response_format": {"type": "json_object"},
         }
