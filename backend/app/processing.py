@@ -31,6 +31,12 @@ MAX_CHANGE_LENGTH = 200
 MAX_LISTED_FACTS = 5
 MAX_NUMBER_DIGITS = 15  # длиннее — это склеенный список, а не сведение
 MODEL_KEEP_ALIVE = "30m"  # чтобы модель не выгружалась между шагами показа
+# Ollama по умолчанию держит окно в 4096 токенов, даже если модель умеет больше, и молча
+# отбрасывает то, что не поместилось. Поэтому длинный черновик режем на части сами.
+MODEL_CONTEXT_TOKENS = 4096
+CHARS_PER_TOKEN = 2.2  # осторожная оценка для русского текста
+ANSWER_GROWTH = 1.2  # переписанный текст обычно чуть длиннее исходного
+MIN_PIECE = 400  # мельче резать бессмысленно
 CACHE_SIZE = 16  # небольшой кэш подготовки: возврат на шаг назад не ждёт модель заново
 NAME_TAG = "имя "
 MIN_NAME_PREFIX = 5  # «иванов» и «иванову» — одно лицо, «иванов» и «иваненко» — разные
@@ -114,6 +120,20 @@ MONTH_PREFIXES = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "ма": 5, "июн": 6,
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
 }
+
+# Числа и даты сверяются точно, а смысл — нет. Эти обороты держат условия документа:
+# потеря «если» или «не» меняет его сильнее, чем любая правка стиля.
+MEANING_MARKERS = (
+    ("условия", re.compile(
+        r"\b(?:если|при\s+условии|в\s+случае|только|не\s+позднее|при\s+наличии|иначе|"
+        r"обязательно|обязан\w*|должен|должна|должны|запрещ\w+|нельзя|не\s+допускается)\b",
+        re.IGNORECASE,
+    )),
+    ("отрицания", re.compile(
+        r"\b(?:не|ни|нет|без|отсутств\w+|неисправ\w+|невозможн\w+|отказ\w*)\b",
+        re.IGNORECASE,
+    )),
+)
 
 SYSTEM_PROMPT = (
     "Ты — редактор официально-деловых документов на русском языке.\n"
@@ -244,6 +264,24 @@ class LLMProcessor:
         confirmed = extract_facts(request.draft, *answered.values())
         # Модель переписывает текст документа. Подписанные реквизиты уже разобраны и ей мешают.
         source = "\n".join(body_lines(request.draft.splitlines(), doc_type))
+        pieces = split_source(source, source_budget(doc_type, answered))
+        replies = [self.rewrite(piece, doc_type, answered, confirmed) for piece in pieces]
+        result = self._build(
+            request, doc_type, merge_replies(replies), answered, confirmed, source
+        )
+        if len(pieces) > 1:
+            # Целиком в окно модели черновик не помещается, и об этом честнее сказать.
+            result.warnings.append(
+                f"Черновик длинный, он обработан частями ({len(pieces)}). "
+                "Проверьте связность текста между частями."
+            )
+        self.remember(key, result)
+        return result
+
+    def rewrite(
+        self, source: str, doc_type: DocumentType, answered: dict[str, str], confirmed: set[str]
+    ) -> LLMReply:
+        """Одна часть черновика: запрос, проверка и не более одного повтора."""
         messages = build_messages(source, doc_type, answered)
         reply: LLMReply | None = None
         problem = ""
@@ -268,9 +306,7 @@ class LLMProcessor:
                 "Модель не вернула корректный ответ даже после повтора. "
                 "Черновик сохранён в форме, попробуйте ещё раз."
             )
-        result = self._build(request, doc_type, reply, answered, confirmed, source)
-        self.remember(key, result)
-        return result
+        return reply
 
     def cached(self, key: tuple) -> ProcessorResult | None:
         with self._lock:
@@ -324,6 +360,12 @@ class LLMProcessor:
                 "Проверьте текст перед отправкой: в нём есть сведения, которых нет в черновике — "
                 + ", ".join(invented)
                 + "."
+            )
+        lost_meaning = lost_markers(source, body)
+        if lost_meaning:
+            warnings.append(
+                "Проверьте смысл: из черновика пропали " + "; ".join(lost_meaning)
+                + ". Убедитесь, что оговорки документа сохранены."
             )
         # Молчаливая потеря сведений так же опасна, как выдуманные: сверка работает в обе стороны.
         lost = missing_facts(confirmed, [*body, *requisites.values()])
@@ -456,6 +498,72 @@ def server_error_text(response: httpx.Response) -> str:
     if isinstance(error, dict):
         error = error.get("message", "")
     return str(error).strip()[:200]
+
+
+def source_budget(doc_type: DocumentType, answered: dict[str, str]) -> int:
+    """Сколько символов черновика помещается в окно модели вместе с ответом."""
+    overhead = sum(len(message["content"]) for message in build_messages("", doc_type, answered))
+    window = MODEL_CONTEXT_TOKENS * CHARS_PER_TOKEN
+    return max(MIN_PIECE, int((window - overhead) / (1 + ANSWER_GROWTH)))
+
+
+def split_source(text: str, budget: int) -> list[str]:
+    """Части не длиннее окна. Режем по абзацам, длинный абзац — по предложениям."""
+    if len(text) <= budget:
+        return [text]
+    pieces: list[str] = []
+    current = ""
+    for block in text_blocks(text, budget):
+        if current and len(current) + len(block) + 1 > budget:
+            pieces.append(current)
+            current = block
+        else:
+            current = f"{current}\n{block}" if current else block
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def text_blocks(text: str, budget: int) -> list[str]:
+    blocks: list[str] = []
+    for paragraph in text.splitlines():
+        if not paragraph.strip():
+            continue
+        if len(paragraph) <= budget:
+            blocks.append(paragraph)
+        else:
+            blocks.extend(split_sentences(paragraph, budget))
+    return blocks
+
+
+def split_sentences(paragraph: str, budget: int) -> list[str]:
+    parts: list[str] = []
+    for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+        rest = sentence.strip()
+        while len(rest) > budget:  # предложение длиннее окна: режем по границе слова
+            cut = rest.rfind(" ", 0, budget)
+            if cut <= 0:
+                cut = budget
+            parts.append(rest[:cut].strip())
+            rest = rest[cut:].strip()
+        if rest:
+            parts.append(rest)
+    return parts
+
+
+def merge_replies(replies: list[LLMReply]) -> LLMReply:
+    """Части собираются в один ответ: текст подряд, реквизит — первый непустой."""
+    if len(replies) == 1:
+        return replies[0]
+    merged = LLMReply()
+    for reply in replies:
+        merged.body.extend(reply.body)
+        merged.changes.extend(reply.changes)
+        for field_id, value in reply.requisites.items():
+            if value and not merged.requisites.get(field_id):
+                merged.requisites[field_id] = value
+    merged.changes = merged.changes[:MAX_CHANGES]
+    return merged
 
 
 def build_messages(
@@ -594,6 +702,22 @@ def word_numbers(text: str) -> set[int]:
 def unconfirmed_facts(texts: list[str], confirmed: set[str]) -> list[str]:
     """Сведения из ответа модели, которых нет в черновике: их нельзя пропускать молча."""
     return facts_not_covered(extract_facts(*texts), confirmed)
+
+
+def lost_markers(source: str, texts: list[str]) -> list[str]:
+    """Условия и отрицания черновика, которых почти не осталось в документе."""
+    result = " ".join(texts)
+    lost = []
+    for name, pattern in MEANING_MARKERS:
+        found = [match.group().lower() for match in pattern.finditer(source)]
+        if not found:
+            continue
+        # Переписывание сливает обороты, поэтому тревожим только при явной потере.
+        if len(pattern.findall(result)) >= max(1, len(found) // 2):
+            continue
+        examples = list(dict.fromkeys(found))[:3]
+        lost.append(f"{name} ({', '.join(examples)})")
+    return lost
 
 
 def missing_facts(confirmed: set[str], texts: list[str]) -> list[str]:

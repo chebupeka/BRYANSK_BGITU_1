@@ -8,11 +8,15 @@ from app.catalog import document_types
 from app.main import create_app
 from app.processing import (
     LLMProcessor,
+    LLMReply,
     build_messages,
     describe_changes,
     extract_facts,
     get_processor,
+    merge_replies,
     missing_facts,
+    source_budget,
+    split_source,
     unconfirmed_facts,
     word_numbers,
 )
@@ -63,11 +67,11 @@ def scripted(*replies: str, error: Exception | None = None):
     return processor, sent
 
 
-def prepared(processor, requisites=None, doc_type="service_memo"):
+def prepared(processor, requisites=None, doc_type="service_memo", draft=DRAFT):
     app = create_app(Settings(text_processor="llm", llm_model="test-model"), processor=processor)
     with TestClient(app) as client:
         response = client.post("/api/process", json={
-            "draft": DRAFT, "doc_type": doc_type, "requisites": requisites or {},
+            "draft": draft, "doc_type": doc_type, "requisites": requisites or {},
         })
     return response
 
@@ -346,3 +350,72 @@ def test_model_echoing_a_requisite_line_does_not_duplicate_it():
     body = prepared(processor).json()["document"]["body"]
     assert len(sent) == 1, "строка реквизита сама по себе повтора не вызывает"
     assert body == ["Прошу согласовать выделение 30 000 рублей до 25.09.2026."]
+
+
+def long_draft() -> str:
+    return "\n".join(
+        f"В кабинете {200 + number} неисправен компьютер, ремонт до 25.09.2026."
+        for number in range(60)
+    )
+
+
+def test_draft_longer_than_the_window_is_processed_in_parts():
+    draft = long_draft()
+    parts = len(split_source(draft, source_budget(document_types()["service_memo"], {})))
+    assert parts > 1, "черновик должен не помещаться в окно модели"
+    replies = [
+        json.dumps({"requisites": {}, "body": [f"Часть {chr(1072 + number)}."], "changes": []},
+                   ensure_ascii=False)
+        for number in range(parts)
+    ]
+    processor, sent = scripted(*replies)
+    result = prepared(processor, draft=draft).json()
+    assert len(sent) == parts, "каждая часть уходит в модель отдельным запросом"
+    assert result["document"]["body"] == [f"Часть {chr(1072 + n)}." for n in range(parts)]
+    assert "обработан частями" in " ".join(result["warnings"])
+
+
+def test_short_draft_goes_in_one_request_without_extra_warning():
+    processor, sent = scripted(CLEAN_REPLY)
+    result = prepared(processor).json()
+    assert len(sent) == 1
+    assert "обработан частями" not in " ".join(result["warnings"])
+
+
+def test_split_keeps_every_line_and_respects_the_budget():
+    lines = [f"Строка {number} про ремонт кабинета." for number in range(200)]
+    pieces = split_source("\n".join(lines), 300)
+    assert all(len(piece) <= 300 for piece in pieces)
+    assert "\n".join(pieces).splitlines() == lines, "ни одна строка не потеряна"
+
+
+def test_merge_takes_the_first_non_empty_requisite():
+    first = LLMReply(requisites={"subject": ""}, body=["Первый абзац."], changes=["одна правка"])
+    second = LLMReply(requisites={"subject": "О ремонте"}, body=["Второй абзац."], changes=[])
+    merged = merge_replies([first, second])
+    assert merged.body == ["Первый абзац.", "Второй абзац."]
+    assert merged.requisites["subject"] == "О ремонте"
+
+
+def test_dropped_condition_is_reported():
+    without = json.dumps({
+        "requisites": {},
+        "body": ["Прошу согласовать выделение 30 000 рублей до 25.09.2026."],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, _ = scripted(without)
+    warnings = " ".join(prepared(processor).json()["warnings"])
+    assert "Проверьте смысл" in warnings and "условия" in warnings
+
+
+def test_rephrased_condition_is_not_reported():
+    rephrased = json.dumps({
+        "requisites": {},
+        "body": [
+            "Прошу согласовать выделение 30 000 рублей до 25.09.2026.",
+            "Поставка возможна при условии согласования бюджета.",
+        ],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, _ = scripted(rephrased)
+    assert "Проверьте смысл" not in " ".join(prepared(processor).json()["warnings"])
