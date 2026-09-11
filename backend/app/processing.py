@@ -272,6 +272,12 @@ class LLMProcessor:
                 + ", ".join(invented)
                 + "."
             )
+        # Молчаливая потеря сведений так же опасна, как выдуманные: сверка работает в обе стороны.
+        lost = missing_facts(confirmed, [*body, *requisites.values()])
+        if lost:
+            warnings.append(
+                "Из черновика не попали в документ: " + ", ".join(lost) + ". Проверьте текст."
+            )
         try:
             document = DocumentContent(
                 doc_type=request.doc_type, requisites=requisites, body=body
@@ -449,18 +455,33 @@ def word_numbers(text: str) -> set[int]:
 
 
 def unconfirmed_facts(texts: list[str], confirmed: set[str]) -> list[str]:
-    known_names = [fact[len(NAME_TAG):] for fact in confirmed if fact.startswith(NAME_TAG)]
-    invented = []
-    for fact in sorted(extract_facts(*texts) - confirmed):
+    """Сведения из ответа модели, которых нет в черновике: их нельзя пропускать молча."""
+    return facts_not_covered(extract_facts(*texts), confirmed)
+
+
+def missing_facts(confirmed: set[str], texts: list[str]) -> list[str]:
+    """Обратная проверка: числа и даты из черновика, которые до документа не дошли.
+
+    Имена сюда не входят: «Иванов И. И. просит выделить...» законно становится «Прошу
+    выделить...», и автор уходит в реквизит. Выдуманное имя ловится в другую сторону.
+    """
+    return facts_not_covered(
+        {fact for fact in confirmed if not fact.startswith(NAME_TAG)}, extract_facts(*texts)
+    )
+
+
+def facts_not_covered(wanted: set[str], available: set[str]) -> list[str]:
+    names = [fact[len(NAME_TAG):] for fact in available if fact.startswith(NAME_TAG)]
+    missing = []
+    for fact in sorted(wanted - available):
         if fact.startswith(NAME_TAG):
-            name = fact[len(NAME_TAG):]
             # Деловой текст склоняет фамилии: «Иванову И. И.» — тот же человек, а не новый.
-            if any(same_name(name, known) for known in known_names):
+            if any(same_name(fact[len(NAME_TAG):], known) for known in names):
                 continue
-        invented.append(fact)
-    if len(invented) > MAX_LISTED_FACTS:
-        return [*invented[:MAX_LISTED_FACTS], "…"]
-    return invented
+        missing.append(fact)
+    if len(missing) > MAX_LISTED_FACTS:
+        return [*missing[:MAX_LISTED_FACTS], "…"]
+    return missing
 
 
 def same_name(first: str, second: str) -> bool:

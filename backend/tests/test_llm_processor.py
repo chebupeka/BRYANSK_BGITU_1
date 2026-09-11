@@ -10,6 +10,7 @@ from app.processing import (
     build_messages,
     extract_facts,
     get_processor,
+    missing_facts,
     unconfirmed_facts,
     word_numbers,
 )
@@ -237,3 +238,26 @@ def test_declined_surname_is_the_same_person():
     confirmed = extract_facts("Иванов И. И. согласовал заявку")
     assert not unconfirmed_facts(["Направить Иванову И. И. для исполнения."], confirmed)
     assert unconfirmed_facts(["Направить Иваненко И. И."], confirmed) == ["имя иваненко"]
+
+
+def test_dropped_fact_is_reported_too():
+    dropped = json.dumps({
+        "requisites": {},
+        "body": ["Прошу согласовать закупку мониторов."],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, _ = scripted(dropped)
+    warnings = " ".join(prepared(processor).json()["warnings"])
+    assert "не попали в документ" in warnings
+    assert "число 30000" in warnings
+
+
+def test_fact_moved_into_a_requisite_is_not_lost():
+    confirmed = extract_facts("Срок до 25.09.2026, сумма 30 000 рублей")
+    assert not missing_facts(confirmed, ["Прошу выделить 30 000 рублей.", "25.09.2026"])
+
+
+def test_author_name_may_disappear_when_the_text_becomes_first_person():
+    confirmed = extract_facts("Иванов И. И. просит выделить 30 000 рублей")
+    assert not missing_facts(confirmed, ["Прошу выделить 30 000 рублей."])
+    assert missing_facts(confirmed, ["Прошу выделить средства."]) == ["число 30000"]
