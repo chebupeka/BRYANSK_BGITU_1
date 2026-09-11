@@ -5,6 +5,7 @@ Ollama. Ответ модели проверяется схемой и неза�
 которых нет в черновике или в ответах пользователя, не попадают в документ молча.
 """
 
+import difflib
 import json
 import re
 from dataclasses import dataclass, field
@@ -20,6 +21,7 @@ MAX_CHANGES = 10
 MAX_CHANGE_LENGTH = 200
 MAX_REQUISITE_LENGTH = 500  # совпадает с ShortText в schemas.py
 MAX_LISTED_FACTS = 5
+MAX_NUMBER_DIGITS = 15  # длиннее — это склеенный список, а не сведение
 NAME_TAG = "имя "
 MIN_NAME_PREFIX = 5  # «иванов» и «иванову» — одно лицо, «иванов» и «иваненко» — разные
 
@@ -38,7 +40,12 @@ NAME = re.compile(
     r"|[А-ЯЁ]\.\s*[А-ЯЁ]\.?\s*[А-ЯЁ][а-яё]+"
 )
 NAME_WORD = re.compile(r"[А-ЯЁ][а-яё]{2,}")
-NUMBER = re.compile(r"\d[\d\u00a0\u202f .,]*\d|\d")
+WORD = re.compile(r"\w+|[^\w\s]")
+SIMILAR_ENOUGH = 0.8  # «сагласовать» и «согласовать» — опечатка, «покупку» и «закупку» — нет
+MAX_EXAMPLE_LENGTH = 60
+# Пробел разделяет разряды только перед группой из трёх цифр, запятая с пробелом —
+# перечисление: «5, 7, 9» это три числа, а «30 000,50» одно.
+NUMBER = re.compile(r"\d+(?:[ \u00a0\u202f]\d{3})*(?:,\d+)?")
 # Числа словами: «30 000 (тридцать тысяч) рублей» — обычная форма делового документа,
 # поэтому цифры и слова должны давать одно и то же сведение. Окончания перечислены явно:
 # совпадение по началу слова превратило бы «стоимость» в сто.
@@ -120,9 +127,7 @@ EXAMPLE_REPLY = (
     '{"requisites": {"subject": "О ремонте принтера"}, '
     '"body": ["Прошу выделить средства на ремонт принтера в связи с выходом оборудования '
     'из строя.", "Стоимость ремонта составляет 12 000 рублей. Работы необходимо выполнить '
-    'до 14.03.2026 при условии наличия средств."], '
-    '"changes": ["Исправлена орфографическая ошибка в слове «выделить».", '
-    '"Разговорные обороты заменены официально-деловыми."]}'
+    'до 14.03.2026 при условии наличия средств."]}'
 )
 RETRY_HINT = (
     "Предыдущий ответ отклонён: {problem}. Повтори ответ строго в том же формате JSON, "
@@ -287,7 +292,13 @@ class LLMProcessor:
             raise ProcessorUnavailable(
                 "Ответ модели не прошёл проверку контракта. Черновик сохранён в форме."
             ) from error
-        return ProcessorResult(document=document, changes=reply.changes, warnings=warnings)
+        # Правки считаются сравнением текстов: модель уже приписывала себе
+        # исправления, которых не делала.
+        return ProcessorResult(
+            document=document,
+            changes=describe_changes(request.draft, body),
+            warnings=warnings,
+        )
 
     def _ask(self, messages: list[dict[str, str]]) -> str:
         headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
@@ -338,6 +349,53 @@ class LLMProcessor:
         return content
 
 
+def describe_changes(draft: str, body: list[str]) -> list[str]:
+    """Что изменилось на самом деле: сравнение слов черновика и готового текста."""
+    before = WORD.findall(draft)
+    after = WORD.findall(" ".join(body))
+    matcher = difflib.SequenceMatcher(
+        None, [word.lower() for word in before], [word.lower() for word in after], autojunk=False
+    )
+    fixes: list[str] = []
+    examples: list[str] = []
+    rephrased = 0
+    for tag, start_old, end_old, start_new, end_new in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        was = " ".join(before[start_old:end_old])
+        became = " ".join(after[start_new:end_new])
+        # Соседние правки приходят одним куском: разбираем его по словам, иначе
+        # исправленная опечатка теряется внутри переписанной фразы.
+        aligned = (
+            list(zip(before[start_old:end_old], after[start_new:end_new]))
+            if tag == "replace" and end_old - start_old == end_new - start_new
+            else []
+        )
+        if aligned:
+            for left, right in aligned:
+                if close_words(left, right):
+                    fixes.append(f"Исправлено: «{left}» → «{right}»")
+                else:
+                    rephrased += 1
+            continue
+        rephrased += 1
+        # В примеры идут только цельные фрагменты: замена одного слова мало что показывает.
+        if tag == "replace" and len(examples) < 2 and was.strip() and became.strip():
+            examples.append(f"Переформулировано: «{shorten(was)}» → «{shorten(became)}»")
+    changes = [*dict.fromkeys(fixes), *examples]
+    if rephrased > len(examples):
+        changes.append(f"Другие правки формулировок: {rephrased - len(examples)}")
+    return [change[:MAX_CHANGE_LENGTH] for change in changes[:MAX_CHANGES]]
+
+
+def close_words(first: str, second: str) -> bool:
+    return difflib.SequenceMatcher(None, first.lower(), second.lower()).ratio() >= SIMILAR_ENOUGH
+
+
+def shorten(value: str) -> str:
+    return value if len(value) <= MAX_EXAMPLE_LENGTH else value[:MAX_EXAMPLE_LENGTH].rstrip() + "…"
+
+
 def server_error_text(response: httpx.Response) -> str:
     """Сообщение сервера модели целиком не показываем, но причину отказа сохраняем."""
     try:
@@ -367,7 +425,7 @@ def build_messages(
     schema = (
         '{"requisites": {'
         + ", ".join(f'"{requisite.id}": ""' for requisite in doc_type.fields)
-        + '}, "body": ["первый абзац", "второй абзац"], "changes": ["что исправлено"]}'
+        + '}, "body": ["первый абзац", "второй абзац"]}'
     )
     user = (
         f"Тип документа: {doc_type.name} — {doc_type.description}\n\n"
@@ -384,8 +442,6 @@ def build_messages(
         "сам, остальные поля заполняй только там, где они названы в черновике прямо. "
         "Не выводи дату документа из срока и не назначай подписантом того, кто просто "
         "упомянут в тексте. Где сведений нет, оставь пустую строку.\n"
-        f"4. В changes перечисли до {MAX_CHANGES} коротких описаний правок, которые ты "
-        "действительно внёс.\n\n"
         f"Ответь строго в таком виде:\n{schema}"
     )
     return [
@@ -458,7 +514,7 @@ def extract_facts(*texts: str) -> set[str]:
             digits = re.sub(r"\D", "", match.group())
             if len(digits) < 2 and is_list_marker(without_names, match):
                 continue  # нумерация списка — оформление, а не факт
-            if digits:
+            if digits and len(digits) <= MAX_NUMBER_DIGITS:
                 facts.add(f"число {digits.lstrip('0') or '0'}")
     return facts
 

@@ -8,6 +8,7 @@ from app.main import create_app
 from app.processing import (
     LLMProcessor,
     build_messages,
+    describe_changes,
     extract_facts,
     get_processor,
     missing_facts,
@@ -77,7 +78,7 @@ def test_clean_reply_is_used_without_retry():
     assert result["processor_mode"] == "llm"
     assert result["document"]["body"][0].startswith("Прошу согласовать выделение 30 000")
     assert result["document"]["requisites"]["subject"] == "О согласовании закупки"
-    assert result["changes"] == ["Текст приведён к официально-деловому стилю."]
+    assert any("Переформулировано" in change for change in result["changes"])
     assert result["warnings"] == []
 
 
@@ -229,10 +230,12 @@ def test_long_list_of_new_facts_is_shortened():
     assert len(invented) == 6 and invented[-1] == "…"
 
 
-def test_space_is_a_thousands_separator_inside_one_number():
-    # «30 000» и «30000» — одно число; поэтому соседние числа через пробел склеиваются.
+def test_thousands_are_grouped_but_lists_are_not():
     assert extract_facts("30 000 рублей") == extract_facts("30000 рублей")
-    assert extract_facts("15 000 25 000") == {"число 1500025000"}
+    assert extract_facts("1 234 567") == {"число 1234567"}
+    assert extract_facts("15 000 25 000") == {"число 15000", "число 25000"}
+    assert extract_facts("кабинеты 162, 163, 164") == {"число 162", "число 163", "число 164"}
+    assert extract_facts("позиции 5, 7, 9") == {"число 5", "число 7", "число 9"}
 
 
 def test_amount_in_words_matches_the_same_amount_in_digits():
@@ -279,3 +282,19 @@ def test_author_name_may_disappear_when_the_text_becomes_first_person():
     confirmed = extract_facts("Иванов И. И. просит выделить 30 000 рублей")
     assert not missing_facts(confirmed, ["Прошу выделить 30 000 рублей."])
     assert missing_facts(confirmed, ["Прошу выделить средства."]) == ["число 30000"]
+
+
+def test_changes_come_from_the_texts_not_from_the_model():
+    fixed = describe_changes("Сообщаю что протикла батарея.", ["Сообщаю, что протекла батарея."])
+    assert "Исправлено: «протикла» → «протекла»" in fixed
+    assert describe_changes("Текст без правок.", ["Текст без правок."]) == []
+
+
+def test_model_cannot_claim_edits_it_did_not_make():
+    boastful = json.dumps({
+        "requisites": {},
+        "body": [DRAFT.splitlines()[0], DRAFT.splitlines()[1]],
+        "changes": ["Исправлены все ошибки", "Текст полностью переписан"],
+    }, ensure_ascii=False)
+    processor, _ = scripted(boastful)
+    assert prepared(processor).json()["changes"] == [], "текст не менялся, значит правок нет"
