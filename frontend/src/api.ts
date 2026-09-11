@@ -29,6 +29,13 @@ export async function getCatalog(): Promise<Catalog> {
   return (await request('/catalog')).json();
 }
 
+export async function suggestRequisites(
+  draft: string, docType: string,
+): Promise<Record<string, string>> {
+  const response = await request('/requisites/suggest', { draft, doc_type: docType });
+  return (await response.json()).requisites ?? {};
+}
+
 export async function processDocument(
   draft: string, docType: string, requisites: Record<string, string>,
 ): Promise<ProcessResult> {

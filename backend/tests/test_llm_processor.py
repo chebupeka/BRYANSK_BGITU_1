@@ -191,8 +191,7 @@ def test_llm_mode_requires_model_name():
 
 
 def test_messages_include_system_rules_and_schema():
-    request = ProcessRequest(doc_type="service_memo", draft=DRAFT, requisites={})
-    messages = build_messages(request, document_types()["service_memo"], {})
+    messages = build_messages(DRAFT, document_types()["service_memo"], {})
     assert messages[0]["role"] == "system"
     assert "Запрещено добавлять" in messages[0]["content"]
     assert [message["role"] for message in messages[1:3]] == ["user", "assistant"], "пример правки"
@@ -332,3 +331,18 @@ def test_cache_returns_a_copy_that_cannot_be_spoiled():
     assert len(sent) == 1
     assert "Приписка мимо модели." not in second.document.body
     assert second.warnings == []
+
+
+def test_model_echoing_a_requisite_line_does_not_duplicate_it():
+    echoed = json.dumps({
+        "requisites": {},
+        "body": [
+            "Кому: Директору колледжа",
+            "Прошу согласовать выделение 30 000 рублей до 25.09.2026.",
+        ],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, sent = scripted(echoed)
+    body = prepared(processor).json()["document"]["body"]
+    assert len(sent) == 1, "строка реквизита сама по себе повтора не вызывает"
+    assert body == ["Прошу согласовать выделение 30 000 рублей до 25.09.2026."]

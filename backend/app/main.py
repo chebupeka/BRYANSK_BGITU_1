@@ -5,13 +5,21 @@ from fastapi.responses import Response
 
 from app.catalog import document_types, templates, validate_requisite_keys
 from app.docx_generator import generate_docx
+from app.extraction import suggest_requisites
 from app.processing import (
     ProcessorUnavailable,
     TextProcessor,
     get_processor,
     prepare_document,
 )
-from app.schemas import Catalog, DownloadRequest, ProcessRequest, ProcessResponse
+from app.schemas import (
+    Catalog,
+    DownloadRequest,
+    ProcessRequest,
+    ProcessResponse,
+    RequisiteSuggestions,
+    SuggestRequest,
+)
 from app.settings import Settings
 
 
@@ -56,6 +64,12 @@ def create_app(
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         return doc_type
+
+    @app.post("/api/requisites/suggest", response_model=RequisiteSuggestions)
+    def suggest(request: SuggestRequest):
+        # Подсказка формы, а не обработка: модель здесь не участвует и ошибки её не влияют.
+        doc_type = selected_type(request.doc_type, {})
+        return RequisiteSuggestions(requisites=suggest_requisites(request.draft, doc_type))
 
     @app.post("/api/process", response_model=ProcessResponse)
     def process(request: ProcessRequest):

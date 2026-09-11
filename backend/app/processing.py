@@ -16,12 +16,18 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.schemas import DocumentContent, DocumentType, ProcessRequest, ProcessResponse
+from app.extraction import body_lines
+from app.schemas import (
+    MAX_REQUISITE_LENGTH,
+    DocumentContent,
+    DocumentType,
+    ProcessRequest,
+    ProcessResponse,
+)
 
 MAX_ATTEMPTS = 2  # основной запрос и не более одного повтора
 MAX_CHANGES = 10
 MAX_CHANGE_LENGTH = 200
-MAX_REQUISITE_LENGTH = 500  # совпадает с ShortText в schemas.py
 MAX_LISTED_FACTS = 5
 MAX_NUMBER_DIGITS = 15  # длиннее — это склеенный список, а не сведение
 MODEL_KEEP_ALIVE = "30m"  # чтобы модель не выгружалась между шагами показа
@@ -174,11 +180,12 @@ class StubProcessor:
     mode = "stub"
 
     def process(self, request: ProcessRequest, doc_type: DocumentType) -> ProcessorResult:
-        # No rewriting or fact extraction: every nonempty source line stays verbatim.
+        # Слова не меняются: каждая непустая строка переносится как есть. Исключение —
+        # подписанные реквизиты вроде «Кому: директору»: они принадлежат шапке документа.
         document = DocumentContent(
             doc_type=request.doc_type,
             requisites=request.requisites,
-            body=[line for line in request.draft.splitlines() if line.strip()],
+            body=body_lines(request.draft.splitlines(), doc_type),
         )
         return ProcessorResult(
             document=document,
@@ -235,7 +242,9 @@ class LLMProcessor:
             return cached
         # Факты извлекаются из источника отдельно от модели: сверять ответ с самим ответом нельзя.
         confirmed = extract_facts(request.draft, *answered.values())
-        messages = build_messages(request, doc_type, answered)
+        # Модель переписывает текст документа. Подписанные реквизиты уже разобраны и ей мешают.
+        source = "\n".join(body_lines(request.draft.splitlines(), doc_type))
+        messages = build_messages(source, doc_type, answered)
         reply: LLMReply | None = None
         problem = ""
         for attempt in range(MAX_ATTEMPTS):
@@ -259,7 +268,7 @@ class LLMProcessor:
                 "Модель не вернула корректный ответ даже после повтора. "
                 "Черновик сохранён в форме, попробуйте ещё раз."
             )
-        result = self._build(request, doc_type, reply, answered, confirmed)
+        result = self._build(request, doc_type, reply, answered, confirmed, source)
         self.remember(key, result)
         return result
 
@@ -286,6 +295,7 @@ class LLMProcessor:
         reply: LLMReply,
         answered: dict[str, str],
         confirmed: set[str],
+        source: str,
     ) -> ProcessorResult:
         warnings: list[str] = []
         requisites = dict(answered)
@@ -302,7 +312,7 @@ class LLMProcessor:
                 )
                 continue
             requisites[requisite.id] = value
-        body = [paragraph for paragraph in reply.body if paragraph.strip()]
+        body = body_lines([p for p in reply.body if p.strip()], doc_type)
         if not body:
             raise ProcessorUnavailable(
                 "Модель вернула пустой текст. Черновик сохранён в форме, попробуйте ещё раз."
@@ -333,7 +343,7 @@ class LLMProcessor:
         # исправления, которых не делала.
         return ProcessorResult(
             document=document,
-            changes=describe_changes(request.draft, body),
+            changes=describe_changes(source, body),
             warnings=warnings,
         )
 
@@ -449,7 +459,7 @@ def server_error_text(response: httpx.Response) -> str:
 
 
 def build_messages(
-    request: ProcessRequest, doc_type: DocumentType, answered: dict[str, str]
+    draft: str, doc_type: DocumentType, answered: dict[str, str]
 ) -> list[dict[str, str]]:
     lines = []
     for requisite in doc_type.fields:
@@ -470,7 +480,7 @@ def build_messages(
     user = (
         f"Тип документа: {doc_type.name} — {doc_type.description}\n\n"
         "Реквизиты этого типа:\n" + "\n".join(lines) + "\n\n"
-        f"Черновик пользователя:\n<<<\n{request.draft}\n>>>\n\n"
+        f"Черновик пользователя:\n<<<\n{draft}\n>>>\n\n"
         "Задача:\n"
         "1. Проверь каждое слово на опечатки и исправь их: ни одно слово не должно остаться "
         "с ошибкой. Затем приведи текст к официально-деловому стилю, сохранив все факты. "

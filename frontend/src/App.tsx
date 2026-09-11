@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Input, Spin, Steps } from 'antd';
-import { downloadDocument, getCatalog, processDocument } from './api';
+import { downloadDocument, getCatalog, processDocument, suggestRequisites } from './api';
 import DocumentOptions from './components/DocumentOptions';
 import DocumentResult from './components/DocumentResult';
 import { loadDraft, saveDraft } from './storage';
@@ -18,6 +18,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [downloaded, setDownloaded] = useState(false);
   const [saved, setSaved] = useState(true);
+  const [suggested, setSuggested] = useState<string[]>([]);
   const mainRef = useRef<HTMLElement>(null);
   const docType = catalog?.doc_types.find(type => type.id === state.docType);
   const template = catalog?.templates.find(item => item.id === state.templateId);
@@ -47,6 +48,27 @@ export default function App() {
     if (changesContent) setResult(null);
     setError('');
     setDownloaded(false);
+  }
+
+  // Подставляет в пустые поля то, что пользователь сам подписал в черновике.
+  async function fillFromDraft(typeId: string) {
+    setSuggested([]);
+    if (!state.draft.trim()) return;
+    try {
+      const found = await suggestRequisites(state.draft, typeId);
+      const current = state.requisitesByType[typeId] ?? {};
+      const added = Object.entries(found)
+        .filter(([id, value]) => value && !(current[id] ?? '').trim());
+      if (!added.length) return;
+      setSuggested(added.map(([id]) => id));
+      setResult(null);
+      setState(previous => ({ ...previous, requisitesByType: {
+        ...previous.requisitesByType,
+        [typeId]: { ...(previous.requisitesByType[typeId] ?? {}), ...Object.fromEntries(added) },
+      } }));
+    } catch {
+      // Подсказка необязательна: без неё форма просто остаётся пустой.
+    }
   }
 
   async function prepare() {
@@ -120,7 +142,8 @@ export default function App() {
 
         {step === 1 && catalog && docType && <DocumentOptions catalog={catalog} type={docType}
           templateId={state.templateId} requisites={requisites} disabled={busy}
-          onType={docType => update({ docType })}
+          suggested={suggested}
+          onType={nextType => { update({ docType: nextType }); void fillFromDraft(nextType); }}
           onTemplate={templateId => update({ templateId }, false)}
           onRequisite={(id, value) => update({ requisitesByType: {
             ...state.requisitesByType, [state.docType]: { ...requisites, [id]: value },
@@ -138,7 +161,8 @@ export default function App() {
             {step === 2 ? 'К реквизитам' : 'Назад'}
           </Button>}
           {step === 0 && <Button type="primary" disabled={!state.draft.trim() || !docType || !template}
-            onClick={() => setStep(1)}>Выбрать тип документа</Button>}
+            onClick={() => { setStep(1); void fillFromDraft(state.docType); }}>
+            Выбрать тип документа</Button>}
           {step === 1 && <Button type="primary" loading={busy} onClick={() => void prepare()}>
             {error ? 'Повторить подготовку' : 'Подготовить документ'}
           </Button>}

@@ -1,4 +1,4 @@
-import { Input, Select } from 'antd';
+import { Alert, Input, Select } from 'antd';
 import type { Catalog, DocumentType } from '../types';
 
 interface Props {
@@ -6,6 +6,7 @@ interface Props {
   type: DocumentType;
   templateId: string;
   requisites: Record<string, string>;
+  suggested: string[];
   disabled: boolean;
   onType: (id: string) => void;
   onTemplate: (id: string) => void;
@@ -13,6 +14,9 @@ interface Props {
 }
 
 export default function DocumentOptions(props: Props) {
+  const filled = props.type.fields
+    .filter(field => props.suggested.includes(field.id))
+    .map(field => field.label);
   return <>
     <h2>Выберите документ</h2>
     <label className="field-label" htmlFor="document-type">Тип документа</label>
@@ -37,6 +41,8 @@ export default function DocumentOptions(props: Props) {
 
     <h3>Реквизиты</h3>
     <p className="helper">Поля со звёздочкой нужны документу. Их можно пропустить: в файле появятся метки «Заполнить».</p>
+    {filled.length > 0 && <div role="status"><Alert type="info" showIcon
+      title={`Из черновика подставлено: ${filled.join(', ')}. Проверьте значения.`} /></div>}
     <div className="requisites-grid">
       {props.type.fields.map(field => <div key={field.id}>
         <label className="field-label" htmlFor={`field-${field.id}`}>
