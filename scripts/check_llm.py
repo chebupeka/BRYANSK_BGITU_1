@@ -6,10 +6,12 @@ the script runs without arguments. Works against a local or a remote Ollama.
 """
 
 import json
+import socket
 import sys
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,12 +42,25 @@ def main():
     root = base_url.removesuffix("/v1")
     print(f"Сервер: {base_url}")
 
+    address = urlsplit(base_url)
+    host, port = address.hostname or base_url, address.port or 11434
     try:
         tags = call(f"{root}/api/tags", timeout=10)
     except (URLError, HTTPError, OSError) as error:
+        reason = getattr(error, "reason", error)
         print(f"Нет связи: {error}")
-        print("Проверьте, что Ollama запущена, открыта в сеть (OLLAMA_HOST=0.0.0.0)")
-        print("и что брандмауэр разрешает порт 11434.")
+        looks_like_ip = host.replace(".", "").isdigit()
+        if isinstance(reason, socket.gaierror):
+            print(f"Имя «{host}» не удалось разрешить. Проверьте, что обе машины в одной "
+                  "частной сети и что включён MagicDNS, либо укажите адрес вида 100.x.x.x.")
+        elif not looks_like_ip and "timed out" in str(error):
+            # Короткое имя macOS ищет через mDNS и молчит до таймаута, а не отвечает отказом.
+            print(f"«{host}» не ответил вовремя. Либо имя не разрешается — компьютер не "
+                  "подключён к частной сети или выключен MagicDNS, либо закрыт порт "
+                  f"{port}. Проверьте адресом вида 100.x.x.x.")
+        else:
+            print(f"Порт {port} на «{host}» не отвечает. Проверьте, что Ollama запущена, "
+                  "открыта в сеть (OLLAMA_HOST=0.0.0.0) и что брандмауэр её пропускает.")
         return 1
 
     names = [item["name"] for item in tags.get("models", [])]
