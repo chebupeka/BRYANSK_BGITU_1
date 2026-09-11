@@ -67,6 +67,27 @@ def test_title_alignment_follows_the_template(client, filled, template_rules, ca
         assert ALIGNMENT_NAMES[title.alignment] == rules["title_alignment"]
 
 
+def test_recipient_block_is_placed_where_the_template_says(
+    client, filled, template_rules, catalog
+):
+    checked = 0
+    for doc_type in catalog["doc_types"]:
+        labels = {field["id"]: field["label"] for field in doc_type["fields"]}
+        prefixes = tuple(f"{labels[key]}: " for key in ("recipient", "sender") if key in labels)
+        if not prefixes:
+            continue
+        for template_id, rules in template_rules.items():
+            data = download(client, filled[doc_type["id"]]["document"], template_id)
+            for paragraph in Document(BytesIO(data)).paragraphs:
+                if paragraph.text.startswith(prefixes):
+                    checked += 1
+                    assert ALIGNMENT_NAMES[paragraph.alignment] == rules["recipient_alignment"], (
+                        f"Шаблон «{template_id}»: «{paragraph.text}» стоит не на своём месте"
+                    )
+
+    assert checked, "Не нашлось ни одного блока адресата для проверки"
+
+
 def test_font_is_declared_for_latin_and_cyrillic_alike(client, filled, template_rules):
     for template_id, rules in template_rules.items():
         data = download(client, filled["service_memo"]["document"], template_id)

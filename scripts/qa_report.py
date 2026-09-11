@@ -163,28 +163,29 @@ def main():
         if out_dir:
             write_samples(client, out_dir, catalog)
 
-    print(f"Режим обработки текста: {mode}")
-    print(f"Типов документов: {len(catalog['doc_types'])}, шаблонов: {len(catalog['templates'])}\n")
-
-    print("КОРПУС ЧЕРНОВИКОВ")
+    failed = sum(1 for _, _, problems in rows if problems)
+    lines = [
+        f"Режим обработки текста: {mode}",
+        f"Типов документов: {len(catalog['doc_types'])}, шаблонов: {len(catalog['templates'])}",
+        "",
+        "КОРПУС ЧЕРНОВИКОВ",
+    ]
     for case, missing, problems in rows:
         status = "ok  " if not problems else "ОШИБКА"
-        print(f"  {status} {case.id:<32} пропусков реквизитов: {missing:<2} {case.label}")
-        for problem in problems:
-            print(f"         └ {problem}")
+        lines.append(f"  {status} {case.id:<32} пропусков реквизитов: {missing:<2} {case.label}")
+        lines += [f"         └ {problem}" for problem in problems]
+    lines += ["", "СВЕРКА С ЭТАЛОНОМ КЕЙСА"]
+    lines += [f"  — {finding}" for finding in findings] or ["  расхождений нет"]
+    lines += [
+        "",
+        f"Итог: черновиков с замечаниями {failed} из {len(rows)}, "
+        f"расхождений с эталоном {len(findings)}",
+    ]
 
-    print("\nСВЕРКА С ЭТАЛОНОМ КЕЙСА")
-    if not findings:
-        print("  расхождений нет")
-    for finding in findings:
-        print(f"  — {finding}")
-
+    print("\n".join(lines))
     if out_dir:
-        print(f"\nОбразцы документов сохранены в {out_dir}")
-
-    failed = sum(1 for _, _, problems in rows if problems)
-    print(f"\nИтог: черновиков с замечаниями {failed} из {len(rows)}, "
-          f"расхождений с эталоном {len(findings)}")
+        (out_dir / "report.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"\nОтчёт и образцы документов сохранены в {out_dir}")
     return 1 if failed else 0
 
 

@@ -4,6 +4,9 @@
 и к реальной модели: меняется обработчик, а не условия сценария.
 """
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from qa_support import (
     ALIGNMENT_NAMES,
@@ -244,3 +247,33 @@ def test_same_document_produces_the_same_text_every_time(client):
     second = docx_text(download(client, document, "classic"))
 
     assert first == second, "Повторное скачивание дало другой документ"
+
+
+def test_simultaneous_users_never_receive_each_others_data(client):
+    # Ловит общий кэш или глобальное состояние, из-за которых черновик одного
+    # пользователя может оказаться в документе другого.
+    def prepare(number):
+        draft = f"Прошу согласовать заявку {number:03d}-ПРОВЕРКА на сумму {number * 1000} рублей."
+        prepared = process(client, draft, "service_memo")
+        return number, docx_text(download(client, prepared["document"], "classic"))
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(prepare, range(1, 25)))
+
+    for number, text in results:
+        assert f"{number:03d}-ПРОВЕРКА" in text, f"Пользователь {number} не получил свой текст"
+        foreign = [n for n, _ in results if n != number and f"{n:03d}-ПРОВЕРКА" in text]
+        assert not foreign, f"В документ пользователя {number} попали чужие данные: {foreign}"
+
+
+def test_largest_allowed_draft_is_turned_into_a_document_quickly(client):
+    line = "Отдел аналитики передаёт сведения для включения в сводный отчёт за квартал.\n"
+    draft = (line * (20000 // len(line) + 1))[:20000]
+
+    started = time.perf_counter()
+    prepared = process(client, draft, "information_note")
+    data = download(client, prepared["document"], "classic")
+    elapsed = time.perf_counter() - started
+
+    assert_editable_docx(data)
+    assert elapsed < 10, f"Документ максимального размера формировался {elapsed:.1f} с"
