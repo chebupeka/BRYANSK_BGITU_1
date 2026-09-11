@@ -324,7 +324,7 @@ def test_request_asks_to_keep_the_model_loaded():
     assert sent[0]["seed"] == 0
 
 
-def test_cache_returns_a_copy_that_cannot_be_spoiled():
+def test_cached_part_cannot_be_spoiled_by_the_caller():
     processor, sent = scripted(CLEAN_REPLY)
     request = ProcessRequest(doc_type="service_memo", draft=DRAFT, requisites={})
     doc_type = document_types()["service_memo"]
@@ -419,3 +419,48 @@ def test_rephrased_condition_is_not_reported():
     }, ensure_ascii=False)
     processor, _ = scripted(rephrased)
     assert "Проверьте смысл" not in " ".join(prepared(processor).json()["warnings"])
+
+
+def test_editing_one_part_leaves_the_others_in_memory():
+    draft = long_draft()
+    doc_type = document_types()["service_memo"]
+    pieces = split_source(draft, source_budget(doc_type, {}))
+    replies = [
+        json.dumps({"requisites": {}, "body": [f"Часть {chr(1072 + number)}."], "changes": []},
+                   ensure_ascii=False)
+        for number in range(len(pieces))
+    ]
+    processor, sent = scripted(*replies, replies[-1])
+    prepared(processor, draft=draft)
+    assert len(sent) == len(pieces)
+
+    # Правка затрагивает только последнюю часть: остальные должны прийти из памяти.
+    edited = draft.replace("В кабинете 259", "В кабинете 259 второго корпуса")
+    assert edited != draft
+    prepared(processor, draft=edited)
+    assert len(sent) == len(pieces) + 1, "заново обрабатывается только изменённая часть"
+
+
+def test_price_turned_into_a_per_item_price_is_reported():
+    """Живой прогон показал это на «30 000 рублей каждый»: сумма та же, смысл другой."""
+    per_item = json.dumps({
+        "requisites": {},
+        "body": ["Прошу согласовать выделение 30 000 рублей каждый до 25.09.2026.",
+                 "Поставка возможна только после согласования бюджета."],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, _ = scripted(per_item, per_item)
+    warnings = " ".join(prepared(processor).json()["warnings"])
+    assert "Проверьте уточнения" in warnings and "каждый" in warnings
+
+
+def test_added_qualifier_near_a_number_is_reported():
+    inflated = json.dumps({
+        "requisites": {},
+        "body": ["Прошу согласовать выделение 30 000 рублей за единицу до 25.09.2026.",
+                 "Поставка возможна только после согласования бюджета."],
+        "changes": [],
+    }, ensure_ascii=False)
+    processor, _ = scripted(inflated, inflated)
+    warnings = " ".join(prepared(processor).json()["warnings"])
+    assert "Проверьте уточнения" in warnings and "за единицу" in warnings

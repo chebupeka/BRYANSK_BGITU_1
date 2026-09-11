@@ -135,3 +135,35 @@ def test_stub_mode_puts_labelled_lines_into_requisites_only():
         }).json()
     assert result["document"]["requisites"]["recipient"] == "Директору"
     assert result["document"]["body"] == ["Прошу согласовать закупку двух мониторов."]
+
+
+def test_processing_alone_keeps_the_header_requisites():
+    """Клиент может не спрашивать подсказки: сведения из шапки всё равно не теряются."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.settings import Settings
+
+    draft = "Кому: Директору колледжа\nДата: 11.09.2026\nПрошу согласовать закупку."
+    with TestClient(create_app(Settings(text_processor="stub"))) as client:
+        result = client.post("/api/process", json={
+            "draft": draft, "doc_type": "service_memo", "requisites": {},
+        }).json()
+    assert result["document"]["requisites"]["recipient"] == "Директору колледжа"
+    assert result["document"]["requisites"]["date"] == "11.09.2026"
+    assert result["document"]["body"] == ["Прошу согласовать закупку."]
+
+
+def test_user_answer_beats_the_header_line():
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.settings import Settings
+
+    draft = "Кому: Директору колледжа\nПрошу согласовать закупку."
+    with TestClient(create_app(Settings(text_processor="stub"))) as client:
+        result = client.post("/api/process", json={
+            "draft": draft, "doc_type": "service_memo",
+            "requisites": {"recipient": "Заместителю директора"},
+        }).json()
+    assert result["document"]["requisites"]["recipient"] == "Заместителю директора"

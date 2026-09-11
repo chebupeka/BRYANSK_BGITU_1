@@ -16,7 +16,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.extraction import body_lines
+from app.extraction import body_lines, suggest_requisites
 from app.schemas import (
     MAX_REQUISITE_LENGTH,
     DocumentContent,
@@ -37,7 +37,7 @@ MODEL_CONTEXT_TOKENS = 4096
 CHARS_PER_TOKEN = 2.2  # осторожная оценка для русского текста
 ANSWER_GROWTH = 1.2  # переписанный текст обычно чуть длиннее исходного
 MIN_PIECE = 400  # мельче резать бессмысленно
-CACHE_SIZE = 16  # небольшой кэш подготовки: возврат на шаг назад не ждёт модель заново
+CACHE_SIZE = 32  # части черновиков в памяти: правка одного абзаца не переделывает остальные
 NAME_TAG = "имя "
 MIN_NAME_PREFIX = 5  # «иванов» и «иванову» — одно лицо, «иванов» и «иваненко» — разные
 
@@ -135,6 +135,16 @@ MEANING_MARKERS = (
     )),
 )
 
+# Число может остаться прежним, а смысл поменяться: «30 000 рублей» и «30 000 рублей
+# за единицу» — разные суммы. Такие уточнения рядом с числом проверяются отдельно.
+QUALIFIERS = re.compile(
+    r"\b(?:за\s+единицу|за\s+штуку|за\s+шт\.?|кажд\w+|ежемесячно|ежегодно|еженедельно|"
+    r"ежедневно|в\s+месяц|в\s+год|в\s+неделю|в\s+день|в\s+час|на\s+человека|с\s+человека|"
+    r"не\s+менее|не\s+более|около|примерно|приблизительно|свыше|минимум|максимум)\b",
+    re.IGNORECASE,
+)
+QUALIFIER_REACH = 40  # символов вокруг числа: дальше уточнение относится уже не к нему
+
 SYSTEM_PROMPT = (
     "Ты — редактор официально-деловых документов на русском языке.\n"
     "Твоя работа: исправить все орфографические и пунктуационные ошибки и переписать текст "
@@ -179,15 +189,6 @@ class ProcessorResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def copy_result(result: ProcessorResult) -> ProcessorResult:
-    """Отдельный экземпляр результата: кэш и вызывающий код не делят изменяемые списки."""
-    return ProcessorResult(
-        document=result.document.model_copy(deep=True),
-        changes=list(result.changes),
-        warnings=list(result.warnings),
-    )
-
-
 class TextProcessor(Protocol):
     """Граница обработки текста: заглушка, отказ или адаптер модели."""
 
@@ -204,7 +205,7 @@ class StubProcessor:
         # подписанные реквизиты вроде «Кому: директору»: они принадлежат шапке документа.
         document = DocumentContent(
             doc_type=request.doc_type,
-            requisites=request.requisites,
+            requisites=from_draft(request.requisites, request.draft, doc_type),
             body=body_lines(request.draft.splitlines(), doc_type),
         )
         return ProcessorResult(
@@ -251,15 +252,11 @@ class LLMProcessor:
         self._api_key = api_key
         self._timeout = timeout
         self._client = client or httpx.Client(timeout=timeout)
-        self._cache: OrderedDict[tuple, ProcessorResult] = OrderedDict()
+        self._parts: OrderedDict[tuple, LLMReply] = OrderedDict()
         self._lock = threading.Lock()
 
     def process(self, request: ProcessRequest, doc_type: DocumentType) -> ProcessorResult:
         answered = {key: value for key, value in request.requisites.items() if value.strip()}
-        key = (request.doc_type, request.draft, tuple(sorted(answered.items())))
-        cached = self.cached(key)
-        if cached is not None:
-            return cached
         # Факты извлекаются из источника отдельно от модели: сверять ответ с самим ответом нельзя.
         confirmed = extract_facts(request.draft, *answered.values())
         # Модель переписывает текст документа. Подписанные реквизиты уже разобраны и ей мешают.
@@ -275,13 +272,16 @@ class LLMProcessor:
                 f"Черновик длинный, он обработан частями ({len(pieces)}). "
                 "Проверьте связность текста между частями."
             )
-        self.remember(key, result)
         return result
 
     def rewrite(
         self, source: str, doc_type: DocumentType, answered: dict[str, str], confirmed: set[str]
     ) -> LLMReply:
         """Одна часть черновика: запрос, проверка и не более одного повтора."""
+        key = (doc_type.id, source, tuple(sorted(answered.items())))
+        cached = self.cached(key)
+        if cached is not None:
+            return cached
         messages = build_messages(source, doc_type, answered)
         reply: LLMReply | None = None
         problem = ""
@@ -306,23 +306,25 @@ class LLMProcessor:
                 "Модель не вернула корректный ответ даже после повтора. "
                 "Черновик сохранён в форме, попробуйте ещё раз."
             )
+        self.remember(key, reply)
         return reply
 
-    def cached(self, key: tuple) -> ProcessorResult | None:
+    def cached(self, key: tuple) -> LLMReply | None:
         with self._lock:
-            if key not in self._cache:
+            if key not in self._parts:
                 return None
-            self._cache.move_to_end(key)
-            stored = self._cache[key]
-        return copy_result(stored)
+            self._parts.move_to_end(key)
+            stored = self._parts[key]
+        return stored.model_copy(deep=True)
 
-    def remember(self, key: tuple, result: ProcessorResult) -> None:
-        # Оформление в ключ не входит: смена шаблона не трогает обработчик вовсе.
-        # Хранится копия: вызывающий код держит ссылку на возвращённый результат.
+    def remember(self, key: tuple, reply: LLMReply) -> None:
+        # Оформление в ключ не входит: смена шаблона не доходит до обработчика вовсе.
+        # Сведения всего черновика в ключ тоже не входят: их проверяет сборка документа,
+        # поэтому кусок, взятый из памяти, всё равно сверяется с текущим черновиком.
         with self._lock:
-            self._cache[key] = copy_result(result)
-            while len(self._cache) > CACHE_SIZE:
-                self._cache.popitem(last=False)
+            self._parts[key] = reply.model_copy(deep=True)
+            while len(self._parts) > CACHE_SIZE:
+                self._parts.popitem(last=False)
 
     def _build(
         self,
@@ -334,7 +336,8 @@ class LLMProcessor:
         source: str,
     ) -> ProcessorResult:
         warnings: list[str] = []
-        requisites = dict(answered)
+        # Подписанное в черновике надёжнее догадки модели: это дословный текст пользователя.
+        requisites = from_draft(answered, request.draft, doc_type)
         for requisite in doc_type.fields:
             if requisite.id in requisites:
                 continue  # ответ пользователя важнее догадки модели
@@ -360,6 +363,12 @@ class LLMProcessor:
                 "Проверьте текст перед отправкой: в нём есть сведения, которых нет в черновике — "
                 + ", ".join(invented)
                 + "."
+            )
+        added = added_qualifiers(source, body)
+        if added:
+            warnings.append(
+                "Проверьте уточнения: рядом с числами появилось «" + "», «".join(added)
+                + "», чего нет в черновике."
             )
         lost_meaning = lost_markers(source, body)
         if lost_meaning:
@@ -500,6 +509,18 @@ def server_error_text(response: httpx.Response) -> str:
     return str(error).strip()[:200]
 
 
+def from_draft(answered: dict[str, str], draft: str, doc_type: DocumentType) -> dict[str, str]:
+    """Ответы пользователя плюс реквизиты, прямо подписанные в черновике.
+
+    Строки вроде «Кому: директору» в текст документа не попадают, поэтому без этого шага
+    сведения из шапки пропали бы вовсе, если клиент не спросил подсказки отдельно.
+    """
+    requisites = {key: value for key, value in answered.items() if value.strip()}
+    for field_id, value in suggest_requisites(draft, doc_type).items():
+        requisites.setdefault(field_id, value)
+    return requisites
+
+
 def source_budget(doc_type: DocumentType, answered: dict[str, str]) -> int:
     """Сколько символов черновика помещается в окно модели вместе с ответом."""
     overhead = sum(len(message["content"]) for message in build_messages("", doc_type, answered))
@@ -591,7 +612,8 @@ def build_messages(
         f"Черновик пользователя:\n<<<\n{draft}\n>>>\n\n"
         "Задача:\n"
         "1. Проверь каждое слово на опечатки и исправь их: ни одно слово не должно остаться "
-        "с ошибкой. Затем приведи текст к официально-деловому стилю, сохранив все факты. "
+        "с ошибкой. Расставь запятые, в том числе перед «что», «чтобы», «который» и «если». "
+        "Затем приведи текст к официально-деловому стилю, сохранив все факты. "
         "Разговорные обороты вроде «а то», «совсем», «плохо работают», «только если» замени "
         "официальными формулировками, сохранив смысл условий.\n"
         "2. Раздели результат на абзацы и помести их в массив body. Заголовок документа "
@@ -702,6 +724,28 @@ def word_numbers(text: str) -> set[int]:
 def unconfirmed_facts(texts: list[str], confirmed: set[str]) -> list[str]:
     """Сведения из ответа модели, которых нет в черновике: их нельзя пропускать молча."""
     return facts_not_covered(extract_facts(*texts), confirmed)
+
+
+def added_qualifiers(source: str, texts: list[str]) -> list[str]:
+    """Уточнения вроде «за единицу», появившиеся рядом с числом, которых не было в черновике."""
+    known = {normalize_phrase(match.group()) for match in QUALIFIERS.finditer(source)}
+    added: dict[str, None] = {}
+    for text in texts:
+        for match in QUALIFIERS.finditer(text):
+            phrase = normalize_phrase(match.group())
+            if phrase in known or not near_number(text, match):
+                continue
+            added[phrase] = None
+    return list(added)[:MAX_LISTED_FACTS]
+
+
+def near_number(text: str, match: re.Match[str]) -> bool:
+    around = text[max(0, match.start() - QUALIFIER_REACH) : match.end() + QUALIFIER_REACH]
+    return bool(NUMBER.search(around) or WORD_NUMBER.search(around))
+
+
+def normalize_phrase(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
 
 
 def lost_markers(source: str, texts: list[str]) -> list[str]:
