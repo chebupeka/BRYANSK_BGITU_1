@@ -1,0 +1,92 @@
+# Эталон из материалов кейса: «Перечень обязательных реквизитов» и «Описание шаблонов оформления».
+#
+# Это не конфигурация сервиса, а независимая копия требований заказчика. Скрипт
+# scripts/qa_report.py сравнивает с ней то, что сервис отдаёт в /api/catalog, и печатает
+# расхождения. Так расхождение видно сразу, а не обнаруживается на защите.
+#
+# field — идентификатор реквизита в backend/app/doc_types/*.yaml, которым он закрыт.
+# part_of — реквизит эталона, который допустимо хранить внутри другого поля.
+# autofill — единственные реквизиты, которые эталон разрешает подставлять автоматически.
+
+doc_types:
+  service_memo:
+    name: Служебная записка
+    required:
+      - { name: Адресат (кому), field: recipient }
+      - { name: Автор (от кого), field: sender }
+      - { name: Должность автора, part_of: sender }
+      - { name: Дата, field: date, autofill: текущая дата, format: ДД.ММ.ГГГГ }
+      - { name: Номер, field: number, autofill: порядковый номер, format: номер-СЗ }
+      - { name: Заголовок, field: subject }
+      - { name: Подпись, field: signer }
+    optional:
+      - { name: Исполнитель, field: executor }
+
+  report_memo:
+    name: Докладная записка
+    required:
+      - { name: Адресат, field: recipient }
+      - { name: Автор, field: sender }
+      - { name: Должность, part_of: sender }
+      - { name: Дата, field: date, autofill: текущая дата, format: ДД.ММ.ГГГГ }
+      - { name: Номер, field: number, autofill: порядковый номер, format: номер-ДЗ }
+      - { name: Заголовок, field: subject }
+      - { name: Подпись, field: signer }
+    optional:
+      - { name: Исполнитель, field: executor }
+
+  information_note:
+    name: Информационная справка
+    required:
+      - { name: Заголовок, field: subject }
+      - { name: Дата, field: date, autofill: текущая дата, format: ДД.ММ.ГГГГ }
+      - { name: Составитель, field: signer }
+      - { name: Подпись, field: signer }
+    optional:
+      - { name: Адресат, field: recipient }
+
+  letter:
+    name: Письмо
+    required:
+      - { name: Адресат, field: recipient }
+      - { name: Отправитель, field: organization }
+      - { name: Должность, part_of: signer }
+      - { name: Дата, field: date, autofill: текущая дата, format: ДД.ММ.ГГГГ }
+      - { name: Номер, field: number, autofill: порядковый номер, format: номер-П }
+      - { name: Тема, field: subject }
+      - { name: Подпись, field: signer }
+    optional:
+      - { name: Обращение, field: salutation }
+      - { name: Исполнитель, field: executor }
+
+templates:
+  classic:
+    name: Классический корпоративный
+    font: Times New Roman
+    font_size: 14
+    line_spacing: 1.5
+    first_line_indent_mm: 12.5
+    margins_mm: { top: 20, right: 15, bottom: 20, left: 30 }
+    title_alignment: center
+    recipient_alignment: right
+    body_alignment: justify
+    signature_alignment: left
+    header: название организации
+    footer: номер страницы
+    header_footer_font_size: 11
+
+  modern:
+    name: Современный регламентный
+    font: Arial
+    font_size: 12
+    line_spacing: 1.15
+    first_line_indent_mm: 0
+    margins_mm: { top: 15, right: 20, bottom: 15, left: 25 }
+    title_alignment: left
+    recipient_alignment: left
+    body_alignment: left
+    signature_alignment: center
+    header: отсутствует
+    footer: название документа и дата
+    header_footer_font_size: 10
+    recipient_layout: таблица «Кому / От кого»

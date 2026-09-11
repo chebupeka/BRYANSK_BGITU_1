@@ -11,6 +11,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+qa_samples/
 playwright-report/
 .sites-runtime/
 .DS_Store
