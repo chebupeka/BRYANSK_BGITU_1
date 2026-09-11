@@ -3,6 +3,13 @@ services:
     build: ./backend
     environment:
       TEXT_PROCESSOR: ${TEXT_PROCESSOR:-stub}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
+    # Позволяет указать в LLM_BASE_URL модель, запущенную на самом компьютере.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -24,3 +31,22 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+  # Необязательный сервис: запускается только с профилем llm.
+  # docker compose --profile llm up -d
+  # docker compose --profile llm exec ollama ollama pull qwen2.5:7b-instruct
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["llm"]
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  ollama-models:

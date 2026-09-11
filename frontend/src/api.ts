@@ -1,13 +1,17 @@
 import type { Catalog, DocumentContent, ProcessResult } from './types';
 
-async function request(path: string, payload?: unknown): Promise<Response> {
+const TIMEOUT_MS = 30_000;
+// Подготовка ждёт модель: LLM_TIMEOUT_SECONDS на запрос плюс один повтор.
+const PROCESS_TIMEOUT_MS = 240_000;
+
+async function request(path: string, payload?: unknown, timeoutMs = TIMEOUT_MS): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
       method: payload === undefined ? 'GET' : 'POST',
       headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: payload === undefined ? undefined : JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new Error('Сервис не отвечает. Проверьте подключение и повторите попытку. Введённые данные остались в форме.');
@@ -28,7 +32,8 @@ export async function getCatalog(): Promise<Catalog> {
 export async function processDocument(
   draft: string, docType: string, requisites: Record<string, string>,
 ): Promise<ProcessResult> {
-  return (await request('/process', { draft, doc_type: docType, requisites })).json();
+  const payload = { draft, doc_type: docType, requisites };
+  return (await request('/process', payload, PROCESS_TIMEOUT_MS)).json();
 }
 
 export async function downloadDocument(document: DocumentContent, templateId: string): Promise<void> {

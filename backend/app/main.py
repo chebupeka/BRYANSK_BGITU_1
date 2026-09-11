@@ -5,7 +5,12 @@ from fastapi.responses import Response
 
 from app.catalog import document_types, templates, validate_requisite_keys
 from app.docx_generator import generate_docx
-from app.processing import ProcessorUnavailable, get_processor, prepare_document
+from app.processing import (
+    ProcessorUnavailable,
+    TextProcessor,
+    get_processor,
+    prepare_document,
+)
 from app.schemas import Catalog, DownloadRequest, ProcessRequest, ProcessResponse
 from app.settings import Settings
 
@@ -17,9 +22,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, processor: TextProcessor | None = None
+) -> FastAPI:
     settings = settings or Settings()
-    processor = get_processor(settings.text_processor)
+    processor = processor or get_processor(
+        settings.text_processor,
+        llm_base_url=settings.llm_base_url,
+        llm_model=settings.llm_model,
+        llm_api_key=settings.llm_api_key,
+        llm_timeout_seconds=settings.llm_timeout_seconds,
+    )
     app = FastAPI(title="Документ за 3 шага", version="0.1.0", lifespan=lifespan)
 
     @app.get("/api/health")
