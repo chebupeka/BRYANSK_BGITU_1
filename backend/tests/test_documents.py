@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 
 from app.catalog import check_contiguous_placements, document_types, templates
 from app.docx_generator import NBSP
-from app.schemas import DocumentType
 from app.main import create_app
+from app.schemas import DocumentType
 from app.settings import Settings
 
 DRAFT = (
