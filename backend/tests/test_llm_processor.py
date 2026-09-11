@@ -175,8 +175,9 @@ def test_messages_include_system_rules_and_schema():
     messages = build_messages(request, document_types()["service_memo"], {})
     assert messages[0]["role"] == "system"
     assert "Запрещено добавлять" in messages[0]["content"]
-    assert '"requisites"' in messages[1]["content"]
-    assert '"body"' in messages[1]["content"]
+    assert [message["role"] for message in messages[1:3]] == ["user", "assistant"], "пример правки"
+    assert '"requisites"' in messages[-1]["content"]
+    assert '"body"' in messages[-1]["content"]
 
 
 @pytest.mark.parametrize("first, second", [
