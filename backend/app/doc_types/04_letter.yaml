@@ -3,11 +3,14 @@ name: Письмо
 description: Официальное обращение к внешнему адресату.
 title: ПИСЬМО
 fields:
-  - { id: organization, label: Организация отправителя, required: true }
-  - { id: recipient, label: Адресат, required: true }
-  - { id: date, label: Дата, required: true }
-  - { id: number, label: Исходящий номер, required: true }
-  - { id: subject, label: Тема, required: true }
-  - { id: attachment, label: Приложение, required: false }
-  - { id: signer, label: Подписант, required: true }
-blocks: [organization, recipient, title, date, number, subject, body, attachment, signer]
+  - { id: organization, label: Организация отправителя, required: true, placement: letterhead }
+  - { id: recipient, label: Адресат, required: true, placement: addressee }
+  - { id: date, label: Дата, required: true, placement: registration }
+  - { id: number, label: Исходящий номер, required: true, placement: registration, prefix: "№ " }
+  - { id: subject, label: Тема, required: true, placement: headline }
+  - { id: salutation, label: Обращение, placement: salutation }
+  - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }
+  - { id: signer_position, label: Должность подписанта, placement: signature }
+  - { id: signer, label: Подписант, required: true, placement: signature }
+  - { id: executor, label: Исполнитель, placement: executor }
+blocks: [organization, date, number, recipient, title, subject, salutation, body, attachment, signer_position, signer, executor]

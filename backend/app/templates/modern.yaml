@@ -1,12 +1,22 @@
 id: modern
-name: Компактный
-description: Arial 11 пт, интервал 1,15 и выравнивание слева.
+name: Современный регламентный
+description: Arial 12 пт, интервал 1,15, шапка «Кому / От кого» таблицей, подпись по центру, внизу название документа и дата.
 font: Arial
-font_size: 11
-margins_mm: { top: 25, right: 25, bottom: 25, left: 25 }
+font_size: 12
+margins_mm: { top: 15, right: 20, bottom: 15, left: 25 }
 line_spacing: 1.15
 paragraph_space_after_pt: 8
 first_line_indent_mm: 0
 title_alignment: left
 recipient_alignment: left
 body_alignment: left
+signature_alignment: center
+recipient_layout: table
+header: none
+footer: title_and_date
+header_footer_font_size: 10
+letterhead_alignment: left
+headline_alignment: left
+headline_bold: true
+addressee_width_mm: 80
+small_font_size: 9

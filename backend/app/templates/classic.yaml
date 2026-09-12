@@ -1,6 +1,6 @@
 id: classic
-name: Классический
-description: Times New Roman 14 пт, интервал 1,5 и адресат справа.
+name: Классический корпоративный
+description: Times New Roman 14 пт, интервал 1,5, адресат справа, организация в верхнем колонтитуле, номер страницы внизу.
 font: Times New Roman
 font_size: 14
 margins_mm: { top: 20, right: 15, bottom: 20, left: 30 }
@@ -10,3 +10,13 @@ first_line_indent_mm: 12.5
 title_alignment: center
 recipient_alignment: right
 body_alignment: justify
+signature_alignment: left
+recipient_layout: block
+header: organization
+footer: page_number
+header_footer_font_size: 11
+letterhead_alignment: center
+headline_alignment: left
+headline_bold: false
+addressee_width_mm: 80
+small_font_size: 10
