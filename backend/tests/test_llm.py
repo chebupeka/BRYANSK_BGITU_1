@@ -287,7 +287,7 @@ def test_own_client_closed_and_settings_secret_redacted():
 
 @pytest.mark.parametrize("overrides", [
     {"llm_max_retries": 2}, {"llm_max_retries": -1},
-    {"llm_timeout_seconds": 0}, {"llm_timeout_seconds": 61},
+    {"llm_timeout_seconds": 0}, {"llm_timeout_seconds": 301},
     {"llm_base_url": "file:///private"},
     {"llm_base_url": "https://username:password@example.com/v1"},
     {"llm_base_url": "https://example.com/v1?key=secret"},

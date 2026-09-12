@@ -6,7 +6,7 @@ fields:
   - { id: organization, label: Организация, placement: letterhead }
   - { id: recipient, label: Кому, required: true, placement: addressee }
   - { id: sender, label: От кого, required: true, placement: addressee }
-  - { id: subject, label: Тема, required: true, placement: headline }
+  - { id: subject, label: Тема, required: true, placement: headline, summary: true }
   - { id: date, label: Дата, required: true, placement: registration }
   - { id: number, label: Номер, required: true, placement: registration, prefix: "№ " }
   - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }

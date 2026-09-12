@@ -82,6 +82,14 @@ def get_processor(
         return StubProcessor()
     if settings.text_processor == "unavailable":
         return UnavailableProcessor()
+    if settings.text_processor == "llm":
+        # Полный обработчик роли 2 со своим транспортом: политика содержания к нему
+        # не применяется, поэтому её передача вместе с этим режимом — ошибка сборки.
+        if content_policy is not None:
+            raise ValueError("TEXT_PROCESSOR=llm owns its own content rules")
+        from app.llm_processor import LLMTextProcessor
+
+        return LLMTextProcessor.from_settings(settings, client=client)
     from app.llm import OpenAIProcessor
 
     return OpenAIProcessor(settings, content_policy=content_policy, client=client)

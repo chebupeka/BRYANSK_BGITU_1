@@ -420,6 +420,11 @@
             "default": false,
             "title": "Required",
             "type": "boolean"
+          },
+          "summary": {
+            "default": false,
+            "title": "Summary",
+            "type": "boolean"
           }
         },
         "required": [
@@ -427,9 +432,54 @@
           "label",
           "required",
           "placement",
-          "prefix"
+          "prefix",
+          "summary"
         ],
         "title": "RequisiteField",
+        "type": "object"
+      },
+      "RequisiteSuggestions": {
+        "additionalProperties": false,
+        "properties": {
+          "requisites": {
+            "maxProperties": 30,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,49}$": {
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "title": "Requisites",
+            "type": "object"
+          }
+        },
+        "required": [
+          "requisites"
+        ],
+        "title": "RequisiteSuggestions",
+        "type": "object"
+      },
+      "SuggestRequest": {
+        "additionalProperties": false,
+        "description": "Черновик и тип: что из него можно подставить в форму реквизитов.",
+        "properties": {
+          "doc_type": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "draft": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Draft",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_type",
+          "draft"
+        ],
+        "title": "SuggestRequest",
         "type": "object"
       },
       "Template": {
@@ -852,6 +902,88 @@
         "summary": "Ready",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/requisites/suggest": {
+      "post": {
+        "description": "A form hint, not processing: no model is involved and its failures cannot reach it.",
+        "operationId": "suggestRequisites",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequisiteSuggestions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid input or catalog selection"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal processing error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "LLM returned unusable content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Processing unavailable or busy"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "LLM timed out"
+          }
+        },
+        "summary": "Suggest",
+        "tags": [
+          "documents"
         ]
       }
     }

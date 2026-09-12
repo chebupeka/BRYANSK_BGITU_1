@@ -10,6 +10,7 @@ from app.catalog import document_types, templates, validate_requisite_keys
 from app.content_policy import ContentPolicy
 from app.docx_generator import generate_docx
 from app.errors import APIError, RequestContextMiddleware, install_error_handlers
+from app.extraction import suggest_requisites
 from app.ports import DocumentRenderer
 from app.processing import TextProcessor, get_processor, prepare_document
 from app.schemas import (
@@ -20,6 +21,8 @@ from app.schemas import (
     ProcessRequest,
     ProcessResponse,
     ReadyResponse,
+    RequisiteSuggestions,
+    SuggestRequest,
 )
 from app.settings import Settings
 
@@ -101,7 +104,8 @@ def create_app(
             raise APIError(
                 503, "processor_unavailable", "Обработка временно недоступна.", retryable=True
             )
-        if owns_processor and settings.text_processor == "openai" and not settings.llm_model:
+        needs_model = settings.text_processor in {"openai", "llm"}
+        if owns_processor and needs_model and not settings.llm_model:
             raise APIError(503, "llm_not_configured", "Укажите LLM_MODEL в настройках backend.")
         return ReadyResponse(
             processor_mode=settings.text_processor, checks={"catalog": True, "processor": True}
@@ -128,6 +132,18 @@ def create_app(
                 "Переданы реквизиты, которых нет у выбранного типа документа.",
             ) from error
         return doc_type
+
+    @app.post(
+        "/api/requisites/suggest",
+        response_model=RequisiteSuggestions,
+        operation_id="suggestRequisites",
+        tags=["documents"],
+        responses=ERROR_RESPONSES,
+    )
+    def suggest(request: SuggestRequest):
+        """A form hint, not processing: no model is involved and its failures cannot reach it."""
+        doc_type = selected_type(request.doc_type, {})
+        return RequisiteSuggestions(requisites=suggest_requisites(request.draft, doc_type))
 
     @app.post(
         "/api/process",

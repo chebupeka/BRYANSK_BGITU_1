@@ -84,6 +84,16 @@ export type RequisiteField = {
   "required": boolean;
   "placement": "labeled" | "letterhead" | "addressee" | "registration" | "headline" | "salutation" | "paragraph" | "signature" | "executor";
   "prefix": string;
+  "summary": boolean;
+};
+
+export type RequisiteSuggestions = {
+  "requisites": Record<string, string>;
+};
+
+export type SuggestRequest = {
+  "doc_type": string;
+  "draft": string;
 };
 
 export type Template = {

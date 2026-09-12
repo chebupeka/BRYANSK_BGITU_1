@@ -13,11 +13,11 @@ class Settings(BaseSettings):
         env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True
     )
 
-    text_processor: Literal["stub", "unavailable", "openai"] = "stub"
+    text_processor: Literal["stub", "unavailable", "openai", "llm"] = "stub"
     llm_base_url: str = "http://localhost:11434/v1"
     llm_model: str = Field(default="", max_length=200)
     llm_api_key: SecretStr = SecretStr("")
-    llm_timeout_seconds: float = Field(default=20, gt=0, le=60)
+    llm_timeout_seconds: float = Field(default=20, gt=0, le=300)
     llm_max_tokens: int = Field(default=4096, ge=128, le=65536)
     # Only retries an invalid model result, never a network or HTTP error.
     llm_max_retries: int = Field(default=1, ge=0, le=1)

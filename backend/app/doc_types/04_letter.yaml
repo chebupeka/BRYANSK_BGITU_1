@@ -7,7 +7,7 @@ fields:
   - { id: recipient, label: Адресат, required: true, placement: addressee }
   - { id: date, label: Дата, required: true, placement: registration }
   - { id: number, label: Исходящий номер, required: true, placement: registration, prefix: "№ " }
-  - { id: subject, label: Тема, required: true, placement: headline }
+  - { id: subject, label: Тема, required: true, placement: headline, summary: true }
   - { id: salutation, label: Обращение, placement: salutation }
   - { id: attachment, label: Приложение, placement: paragraph, prefix: "Приложение: " }
   - { id: signer_position, label: Должность подписанта, placement: signature }

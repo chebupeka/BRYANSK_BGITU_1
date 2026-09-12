@@ -3,8 +3,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+MAX_REQUISITE_LENGTH = 500
+
 Identifier = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,49}$")]
-ShortText = Annotated[str, StringConstraints(max_length=500)]
+ShortText = Annotated[str, StringConstraints(max_length=MAX_REQUISITE_LENGTH)]
 Paragraph = Annotated[str, StringConstraints(min_length=1, max_length=20000)]
 Alignment = Literal["left", "center", "right", "justify"]
 # Where a requisite goes in the DOCX. Neighbouring fields with the same placement form one block.
@@ -39,6 +41,9 @@ class RequisiteField(Contract):
     placement: Placement = "labeled"
     # Static text before the value, e.g. «№ » or «Приложение: ». Not used by «labeled».
     prefix: str = ""
+    # Тема документа — краткая формулировка по смыслу черновика, а не цитата из него.
+    # Остальные реквизиты обработчик берёт только там, где они названы прямо.
+    summary: bool = False
 
 
 class DocumentType(Contract):
@@ -108,10 +113,9 @@ class DocumentContent(Contract):
         return {key: check_xml_text(text).strip() for key, text in value.items()}
 
 
-class ProcessRequest(Contract):
+class DraftInput(Contract):
     doc_type: Identifier
     draft: str = Field(min_length=1, max_length=20000)
-    requisites: dict[Identifier, ShortText] = Field(default_factory=dict, max_length=30)
 
     @field_validator("draft")
     @classmethod
@@ -119,6 +123,18 @@ class ProcessRequest(Contract):
         if not value.strip():
             raise ValueError("Введите черновик документа")
         return check_xml_text(value)
+
+
+class SuggestRequest(DraftInput):
+    """Черновик и тип: что из него можно подставить в форму реквизитов."""
+
+
+class RequisiteSuggestions(Contract):
+    requisites: dict[Identifier, ShortText] = Field(default_factory=dict, max_length=30)
+
+
+class ProcessRequest(DraftInput):
+    requisites: dict[Identifier, ShortText] = Field(default_factory=dict, max_length=30)
 
     @field_validator("requisites")
     @classmethod

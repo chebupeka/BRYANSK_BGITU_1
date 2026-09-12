@@ -40,11 +40,15 @@ services:
         condition: service_healthy
   # Optional local provider; models are installed manually with `ollama pull`.
   # Set LLM_BASE_URL=http://ollama:11434/v1 to use it from the backend.
+  #   docker compose --profile ollama up -d
+  #   docker compose --profile ollama exec ollama ollama pull qwen2.5:7b-instruct
   ollama:
     image: ollama/ollama:latest
     profiles: [ollama]
     volumes:
       - ollama_models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s

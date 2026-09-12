@@ -5,7 +5,7 @@ title: ИНФОРМАЦИОННАЯ СПРАВКА
 fields:
   - { id: organization, label: Организация, placement: letterhead }
   - { id: recipient, label: Адресат, placement: addressee }
-  - { id: subject, label: О чём справка, required: true, placement: headline }
+  - { id: subject, label: О чём справка, required: true, placement: headline, summary: true }
   - { id: date, label: Дата, required: true, placement: registration }
   - { id: number, label: Номер, placement: registration, prefix: "№ " }
   - { id: purpose, label: Назначение справки }

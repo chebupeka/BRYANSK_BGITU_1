@@ -1,0 +1,136 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+html {
+  background: var(--bg);
+  scrollbar-gutter: stable both-edges;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-height) + 16px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, p, ul, ol, dl, figure { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+
+h1, h2, h3 {
+  font-weight: 620;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
+}
+
+a { color: inherit; }
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translate(-50%, -140%);
+  z-index: 90;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: none;
+  transition: transform var(--fast) var(--ease);
+}
+.skip-link:focus-visible { transform: translate(-50%, 0); }
+
+/* A fine grain over everything: it keeps the large flat areas from banding and gives the
+   page the texture of print rather than of a screen fill. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 66;
+  pointer-events: none;
+  opacity: var(--grain);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+/* Sections lift into place once, the way the product pages introduce a block. */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition: opacity var(--slow) var(--ease-out), transform var(--slow) var(--ease-out);
+}
+.reveal.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/* Printing gives the page alone, at its real size. */
+@media print {
+  .app-header, .hero, .studio-main, .app-footer, .preview-head, .preview-note, .toast,
+  .skip-link { display: none !important; }
+  html, body { background: #fff; }
+  .studio, .studio-grid, .view-studio, .preview-pane, .preview-stage { display: block; padding: 0 !important; margin: 0; }
+  .preview-pane, .preview-stage {
+    border: 0 !important; background: transparent !important; box-shadow: none !important;
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    overflow: visible !important; max-height: none !important;
+  }
+  .preview-viewport { width: auto !important; min-width: 0 !important; max-width: none !important; }
+  .page-tilt { transform: none !important; width: auto !important; margin: 0 !important; }
+  .page-shadow { display: none; }
+  .page-scaler { width: auto !important; height: auto !important; box-shadow: none !important; border-radius: 0 !important; }
+  .page {
+    transform: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 210mm !important;
+  }
+  @page { size: A4; margin: 0; }
+}
