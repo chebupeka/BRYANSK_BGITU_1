@@ -72,18 +72,51 @@ def test_recipient_block_is_placed_where_the_template_says(
 ):
     checked = 0
     for doc_type in catalog["doc_types"]:
-        labels = {field["id"]: field["label"] for field in doc_type["fields"]}
-        prefixes = tuple(f"{labels[key]}: " for key in ("recipient", "sender") if key in labels)
-        if not prefixes:
+        values = tuple(
+            f"Значение {field['id']}"
+            for field in doc_type["fields"]
+            if field["placement"] == "addressee"
+        )
+        if not values:
             continue
         for template_id, rules in template_rules.items():
             data = download(client, filled[doc_type["id"]]["document"], template_id)
-            for paragraph in Document(BytesIO(data)).paragraphs:
-                if paragraph.text.startswith(prefixes):
-                    checked += 1
+            document = Document(BytesIO(data))
+            if rules["recipient_layout"] == "table":
+                # Шапка «Кому / От кого»: значения стоят в ячейках, и место блока задаёт
+                # сама таблица, а не выравнивание абзаца внутри ячейки.
+                cells = [
+                    cell.text
+                    for table in document.tables
+                    for row in table.rows
+                    for cell in row.cells
+                ]
+                for value in values:
+                    assert any(value in cell for cell in cells), (
+                        f"Шаблон «{template_id}»: «{value}» не попал в шапку адресата"
+                    )
+                checked += 1
+                continue
+            section = document.sections[0]
+            text_width_mm = (
+                section.page_width.mm - section.left_margin.mm - section.right_margin.mm
+            )
+            for paragraph in document.paragraphs:
+                if not any(value in paragraph.text for value in values):
+                    continue
+                checked += 1
+                if rules["recipient_alignment"] != "right":
                     assert ALIGNMENT_NAMES[paragraph.alignment] == rules["recipient_alignment"], (
                         f"Шаблон «{template_id}»: «{paragraph.text}» стоит не на своём месте"
                     )
+                    continue
+                # Угловой блок по ГОСТ: строки не выключены вправо, а начинаются в правой
+                # части страницы и переносятся внутри своей колонки шириной addressee_width_mm.
+                indent = paragraph.paragraph_format.left_indent
+                expected = text_width_mm - rules["addressee_width_mm"]
+                assert indent is not None and abs(indent.mm - expected) < 0.2, (
+                    f"Шаблон «{template_id}»: «{paragraph.text}» не выведен в правую часть"
+                )
 
     assert checked, "Не нашлось ни одного блока адресата для проверки"
 
@@ -99,23 +132,38 @@ def test_font_is_declared_for_latin_and_cyrillic_alike(client, filled, template_
         assert fonts.get(qn("w:hAnsi")) == rules["font"], f"Шаблон «{template_id}»"
 
 
-def test_requisites_appear_in_the_order_set_by_the_document_type(client, filled, catalog):
+def test_requisites_appear_in_the_order_set_by_the_document_type(
+    client, filled, catalog, template_rules
+):
+    template_id = "classic"
+    letterhead_in_header = template_rules[template_id]["header"] == "organization"
     for doc_type in catalog["doc_types"]:
         prepared = filled[doc_type["id"]]
-        data = download(client, prepared["document"], "classic")
+        data = download(client, prepared["document"], template_id)
         texts = paragraph_texts(data)
-        labels = {field["id"]: field["label"] for field in doc_type["fields"]}
+        fields = {field["id"]: field for field in doc_type["fields"]}
         body = {line.strip() for line in prepared["document"]["body"]}
 
         positions = []
         for block in doc_type["blocks"]:
             if block == "title":
                 positions.append(texts.index(doc_type["title"]))
-            elif block == "body":
+                continue
+            if block == "body":
                 positions.append(next(i for i, t in enumerate(texts) if t.strip() in body))
-            else:
-                prefix = f"{labels[block]}: "
+                continue
+            field = fields[block]
+            if field["placement"] == "letterhead" and letterhead_in_header:
+                # Бланк ушёл в верхний колонтитул: в порядке страницы его места нет.
+                continue
+            if field["placement"] == "labeled":
+                prefix = f"{field['label']}: "
                 positions.append(next(i for i, t in enumerate(texts) if t.startswith(prefix)))
+                continue
+            # Остальные placement печатаются без подписи поля, а соседние реквизиты одного
+            # placement — общим абзацем: ищем значение и допускаем совпадение индексов.
+            value = f"Значение {block}"
+            positions.append(next(i for i, t in enumerate(texts) if value in t))
 
         assert positions == sorted(positions), (
             f"Тип «{doc_type['name']}»: порядок блоков в файле не совпадает с конфигурацией"

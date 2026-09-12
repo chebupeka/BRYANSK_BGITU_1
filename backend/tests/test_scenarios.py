@@ -10,9 +10,11 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from qa_support import (
     ALIGNMENT_NAMES,
+    PARALLEL_USERS,
     assert_editable_docx,
     body_paragraphs,
     case_by_id,
+    content_pieces,
     docx_text,
     download,
     keeps,
@@ -144,14 +146,20 @@ def test_scenario_5_every_type_keeps_its_own_structure(client, catalog, required
 
 
 @pytest.mark.parametrize("type_id", ["service_memo", "report_memo", "information_note", "letter"])
-def test_scenario_5_template_changes_look_not_content(client, type_id):
+def test_scenario_5_template_changes_look_not_content(client, catalog, type_id):
     draft = case_by_id("service_memo_01_structured").draft
     document = process(client, draft, type_id)["document"]
+    doc_type = next(item for item in catalog["doc_types"] if item["id"] == type_id)
+    labels = frozenset(field["label"] for field in doc_type["fields"])
 
     classic = download(client, document, "classic")
     modern = download(client, document, "modern")
 
-    assert docx_text(classic) == docx_text(modern), "Смена шаблона изменила содержание документа"
+    # Дословно текст файлов не совпадает: оформление решает, где стоит бланк, собран ли
+    # адресат таблицей и что вынесено в нижний колонтитул. Содержание совпадать обязано.
+    assert content_pieces(classic, labels) == content_pieces(modern, labels), (
+        "Смена шаблона изменила содержание документа"
+    )
     differences = {
         key for key, value in measured_layout(classic).items()
         if measured_layout(modern)[key] != value
@@ -249,15 +257,16 @@ def test_same_document_produces_the_same_text_every_time(client):
     assert first == second, "Повторное скачивание дало другой документ"
 
 
-def test_simultaneous_users_never_receive_each_others_data(client):
+def test_simultaneous_users_never_receive_each_others_data(parallel_client):
     # Ловит общий кэш или глобальное состояние, из-за которых черновик одного
-    # пользователя может оказаться в документе другого.
+    # пользователя может оказаться в документе другого. Лимит одновременной обработки
+    # здесь поднят под размер пачки: отказ по занятости — предмет отдельной проверки.
     def prepare(number):
         draft = f"Прошу согласовать заявку {number:03d}-ПРОВЕРКА на сумму {number * 1000} рублей."
-        prepared = process(client, draft, "service_memo")
-        return number, docx_text(download(client, prepared["document"], "classic"))
+        prepared = process(parallel_client, draft, "service_memo")
+        return number, docx_text(download(parallel_client, prepared["document"], "classic"))
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=PARALLEL_USERS) as pool:
         results = list(pool.map(prepare, range(1, 25)))
 
     for number, text in results:

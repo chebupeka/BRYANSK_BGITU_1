@@ -3,6 +3,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from qa_support import PARALLEL_USERS
 
 from app.main import create_app
 from app.settings import Settings
@@ -12,6 +13,14 @@ from app.settings import Settings
 def client():
     """Сервис с заглушкой обработки: она переносит текст дословно и ничего не добавляет."""
     with TestClient(create_app(Settings(text_processor="stub"))) as ready:
+        yield ready
+
+
+@pytest.fixture(scope="session")
+def parallel_client():
+    """Сервис, чей лимит одновременной обработки не мешает проверке изоляции данных."""
+    settings = Settings(text_processor="stub", max_concurrent_processes=PARALLEL_USERS)
+    with TestClient(create_app(settings)) as ready:
         yield ready
 
 

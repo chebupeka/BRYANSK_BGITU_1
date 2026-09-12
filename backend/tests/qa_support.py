@@ -17,6 +17,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 CORPUS_DIR = Path(__file__).resolve().parents[2] / "examples" / "drafts"
 
+# Пачка одновременных запросов в проверке изоляции данных. Лимит приложения в этой
+# проверке поднимают до того же числа: иначе она упирается в 503 processor_busy, который
+# проверяется отдельно в test_backend_integration.
+PARALLEL_USERS = 8
+
 # Пробел внутри числа — разделитель разрядов, а не граница значения: 180 000 == 180000.
 DIGIT_GROUP = re.compile(r"(?<=\d)[\s ](?=\d)")
 NUMBER = re.compile(r"\d[\d\s ]*\d|\d")
@@ -105,6 +110,22 @@ def docx_text(data: bytes) -> str:
         for container in (section.header, section.footer):
             parts += [paragraph.text for paragraph in container.paragraphs]
     return "\n".join(parts)
+
+
+def content_pieces(data: bytes, template_labels: frozenset[str] = frozenset()) -> set[str]:
+    """Содержание файла без оформительской обвязки: нижнего колонтитула и подписей шапки.
+
+    Шаблон вправе перенести бланк в верхний колонтитул, собрать адресата таблицей с
+    подписями «Кому / От кого» и вывести внизу номер страницы или название документа.
+    Само содержание от выбора оформления зависеть не должно — его и сравнивают.
+    """
+    document = Document(BytesIO(data))
+    pieces = [paragraph.text.strip() for paragraph in document.paragraphs]
+    for table in document.tables:
+        pieces += [cell.text.strip() for row in table.rows for cell in row.cells]
+    for section in document.sections:
+        pieces += [paragraph.text.strip() for paragraph in section.header.paragraphs]
+    return {piece for piece in pieces if piece and piece not in template_labels}
 
 
 def assert_editable_docx(data: bytes) -> None:

@@ -35,12 +35,10 @@ def test_corpus_ids_are_unique_and_files_exist():
 
 
 @draft_case
-def test_manifest_describes_the_draft_truthfully(case, required_fields, field_labels):
+def test_manifest_describes_the_draft_truthfully(case, field_labels):
     known = set(field_labels[case.doc_type])
     assert set(case.in_draft) <= known, f"Неизвестные реквизиты в in_draft: {case.id}"
-    assert set(case.not_in_draft) <= set(required_fields[case.doc_type]), (
-        f"В not_in_draft перечислены необязательные реквизиты: {case.id}"
-    )
+    assert set(case.not_in_draft) <= known, f"Неизвестные реквизиты в not_in_draft: {case.id}"
     assert not set(case.in_draft) & set(case.not_in_draft), (
         f"Реквизит одновременно назван и отсутствующим: {case.id}"
     )
@@ -73,9 +71,10 @@ def test_processing_adds_no_numbers_that_were_not_in_the_draft(client, case):
 
 
 @draft_case
-def test_requisites_absent_from_the_draft_stay_empty(client, case):
+def test_requisites_absent_from_the_draft_stay_empty(client, case, required_fields):
     prepared = process(client, case.draft, case.doc_type)
 
+    required = set(required_fields[case.doc_type])
     reported = {field["id"] for field in prepared["missing_fields"]}
     for field_id in case.not_in_draft:
         value = prepared["document"]["requisites"].get(field_id, "")
@@ -83,9 +82,12 @@ def test_requisites_absent_from_the_draft_stay_empty(client, case):
             f"«{case.label}»: реквизит «{field_id}» заполнен значением «{value}», "
             "которого нет в черновике"
         )
-        assert field_id in reported, (
-            f"«{case.label}»: о пропуске реквизита «{field_id}» не сообщено пользователю"
-        )
+        # О пропуске сообщают по обязательным реквизитам: необязательный просто не
+        # печатается, и в missing_fields его нет — но выдумывать значение нельзя и для него.
+        if field_id in required:
+            assert field_id in reported, (
+                f"«{case.label}»: о пропуске реквизита «{field_id}» не сообщено пользователю"
+            )
 
 
 @draft_case
