@@ -1,16 +1,24 @@
 """Разбор помеченных строк черновика: «Кому: директору» — это готовый реквизит.
 
-Здесь нет догадок. Значение берётся, только если пользователь сам подписал строку
-известным словом, поэтому подставленное можно показывать в форме без проверки модели.
+Здесь нет догадок. Значение берётся там, где пользователь сам подписал строку известным
+словом или написал её в общепринятом виде: «№ 12-45», дата отдельной строкой, «Приложение
+на 2 листах». Адресата и подписанта из обычного текста не выводим: это уже догадка,
+а пустое поле честнее выдуманного.
 """
 
 import re
 
+from app.dates import DATE
 from app.schemas import MAX_REQUISITE_LENGTH, DocumentType, check_xml_text
 
 # Метка отделяется двоеточием или тире с пробелами; тире внутри значения не мешает.
 LABEL_LINE = re.compile(r"^[\s>*•·-]*([^:\n]{2,40}?)\s*(?::|\s[—–-]\s)\s*(\S.*?)\s*$")
-NUMBER_LINE = re.compile(r"^[\s>*•·-]*№\s*(\S.*?)\s*$")
+NUMBER_LINE = re.compile(r"^[\s>*•·-]*(?:исх\.?\s*)?№\s*(\S.*?)\s*$", re.IGNORECASE)
+# Дата отдельной строкой — это дата документа: в тексте она стояла бы рядом со словами.
+DATE_ONLY_LINE = re.compile(
+    rf"^[\s>*•·-]*({DATE.pattern})\s*(?:г\.?|года)?\s*$", re.IGNORECASE
+)
+ATTACHMENT_LINE = re.compile(r"^[\s>*•·-]*приложени[ея]\s+(\S.*?)\s*$", re.IGNORECASE)
 INITIAL_AT_END = re.compile(r"\b[А-ЯЁA-Z]\.$")
 FIELD_KEYWORDS: dict[str, tuple[str, ...]] = {
     "recipient": ("кому", "адресат", "получатель", "кому направляется"),
@@ -44,21 +52,48 @@ def body_lines(lines: list[str], doc_type: DocumentType) -> list[str]:
 
 
 def scan(lines: list[str], doc_type: DocumentType):
-    """Строки вида «Кому: директору»: их номер, поле и значение."""
+    """Строки-реквизиты черновика: их номер, поле и значение."""
     labels = field_labels(doc_type)
-    has_number = any(field.id == "number" for field in doc_type.fields)
+    fields = {field.id for field in doc_type.fields}
     for index, line in enumerate(lines):
-        match = LABEL_LINE.match(line)
-        if match:
-            field_id = labels.get(normalize(match.group(1)))
-            value = clean_value(match.group(2))
-        elif has_number and (short := NUMBER_LINE.match(line)):
-            # «№ 12-45» подписью не выглядит, но означает ровно исходящий номер.
-            field_id, value = "number", clean_value(short.group(1))
-        else:
+        found = labelled_value(line, labels) or usual_value(line, fields)
+        if not found:
             continue
-        if field_id and value:
-            yield index, field_id, value
+        for field_id, value in split_number_and_date(*found, fields):
+            if field_id in fields and value:
+                yield index, field_id, value
+
+
+def split_number_and_date(
+    field_id: str, value: str, fields: set[str]
+) -> list[tuple[str, str]]:
+    """«12-45 от 11.09.2026» — это номер и дата, а не номер с хвостом."""
+    if field_id != "number" or "date" not in fields:
+        return [(field_id, value)]
+    match = re.search(rf"\bот\s+({DATE.pattern})", value, re.IGNORECASE)
+    if not match:
+        return [(field_id, value)]
+    return [("number", clean_value(value[: match.start()])), ("date", clean_value(match.group(1)))]
+
+
+def labelled_value(line: str, labels: dict[str, str]) -> tuple[str, str] | None:
+    match = LABEL_LINE.match(line)
+    if not match:
+        return None
+    field_id = labels.get(normalize(match.group(1)))
+    return (field_id, clean_value(match.group(2))) if field_id else None
+
+
+def usual_value(line: str, fields: set[str]) -> tuple[str, str] | None:
+    """Записи, которые подписывать не принято, но толкуются однозначно."""
+    if "number" in fields and (match := NUMBER_LINE.match(line)):
+        return "number", clean_value(match.group(1))
+    if "date" in fields and (match := DATE_ONLY_LINE.match(line)):
+        return "date", clean_value(match.group(1))
+    if "attachment" in fields and (match := ATTACHMENT_LINE.match(line)):
+        # Слово «Приложение» добавит генератор, в значении остаётся только описание.
+        return "attachment", clean_value(match.group(1))
+    return None
 
 
 def field_labels(doc_type: DocumentType) -> dict[str, str]:

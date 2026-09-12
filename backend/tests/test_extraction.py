@@ -167,3 +167,30 @@ def test_user_answer_beats_the_header_line():
             "requisites": {"recipient": "Заместителю директора"},
         }).json()
     assert result["document"]["requisites"]["recipient"] == "Заместителю директора"
+
+
+def test_date_on_its_own_line_is_the_document_date():
+    assert suggest("11.09.2026\nПрошу закупить мониторы.") == {"date": "11.09.2026"}
+    assert suggest("11 сентября 2026 года\nПрошу закупить.") == {"date": "11 сентября 2026"}
+
+
+def test_deadline_inside_a_sentence_is_not_the_document_date():
+    assert suggest("Прошу закупить мониторы до 25.09.2026, если бюджет согласуют.") == {}
+
+
+def test_outgoing_number_line_splits_into_number_and_date():
+    draft = "Исх. № 12-45 от 11.09.2026\nПрошу прислать коммерческое предложение."
+    assert suggest(draft, "letter") == {"number": "12-45", "date": "11.09.2026"}
+    kept = body_lines(draft.splitlines(), document_types()["letter"])
+    assert kept == ["Прошу прислать коммерческое предложение."]
+
+
+def test_attachment_line_keeps_only_its_description():
+    draft = "Прошу заменить окно в кабинете 204.\nПриложение на 2 листах"
+    found = suggest(draft, "report_memo")
+    assert found["attachment"] == "на 2 листах", "слово «Приложение» добавит генератор"
+
+
+def test_unlabelled_fields_are_not_guessed_from_prose():
+    draft = "Директор колледжа Иванов И. И. просит лаборанта Петрову А. А. закупить мониторы."
+    assert suggest(draft) == {}, "адресата и подписанта из текста не выводим"
