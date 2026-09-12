@@ -24,6 +24,7 @@ export type DocumentType = {
   "name": string;
   "description": string;
   "title": string;
+  "show_title": boolean;
   "fields": Array<RequisiteField>;
   "blocks": Array<string>;
 };
@@ -81,6 +82,8 @@ export type RequisiteField = {
   "id": string;
   "label": string;
   "required": boolean;
+  "placement": "labeled" | "letterhead" | "addressee" | "registration" | "headline" | "salutation" | "paragraph" | "signature" | "executor";
+  "prefix": string;
 };
 
 export type Template = {
@@ -96,6 +99,16 @@ export type Template = {
   "title_alignment": "left" | "center" | "right" | "justify";
   "recipient_alignment": "left" | "center" | "right" | "justify";
   "body_alignment": "left" | "center" | "right" | "justify";
+  "signature_alignment": "left" | "center" | "right" | "justify";
+  "recipient_layout": "block" | "table";
+  "header": "none" | "organization";
+  "footer": "none" | "page_number" | "title_and_date";
+  "header_footer_font_size": number;
+  "letterhead_alignment": "left" | "center" | "right" | "justify";
+  "headline_alignment": "left" | "center" | "right" | "justify";
+  "headline_bold": boolean;
+  "addressee_width_mm": number;
+  "small_font_size": number;
 };
 
 export type ProcessResult = ProcessResponse;

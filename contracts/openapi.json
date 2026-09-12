@@ -138,6 +138,11 @@
             "title": "Name",
             "type": "string"
           },
+          "show_title": {
+            "default": true,
+            "title": "Show Title",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -148,6 +153,7 @@
           "name",
           "description",
           "title",
+          "show_title",
           "fields",
           "blocks"
         ],
@@ -389,6 +395,27 @@
             "title": "Label",
             "type": "string"
           },
+          "placement": {
+            "default": "labeled",
+            "enum": [
+              "labeled",
+              "letterhead",
+              "addressee",
+              "registration",
+              "headline",
+              "salutation",
+              "paragraph",
+              "signature",
+              "executor"
+            ],
+            "title": "Placement",
+            "type": "string"
+          },
+          "prefix": {
+            "default": "",
+            "title": "Prefix",
+            "type": "string"
+          },
           "required": {
             "default": false,
             "title": "Required",
@@ -398,7 +425,9 @@
         "required": [
           "id",
           "label",
-          "required"
+          "required",
+          "placement",
+          "prefix"
         ],
         "title": "RequisiteField",
         "type": "object"
@@ -406,6 +435,13 @@
       "Template": {
         "additionalProperties": false,
         "properties": {
+          "addressee_width_mm": {
+            "default": 80,
+            "maximum": 120.0,
+            "minimum": 50.0,
+            "title": "Addressee Width Mm",
+            "type": "number"
+          },
           "body_alignment": {
             "enum": [
               "left",
@@ -436,9 +472,62 @@
             "title": "Font Size",
             "type": "number"
           },
+          "footer": {
+            "default": "none",
+            "enum": [
+              "none",
+              "page_number",
+              "title_and_date"
+            ],
+            "title": "Footer",
+            "type": "string"
+          },
+          "header": {
+            "default": "none",
+            "enum": [
+              "none",
+              "organization"
+            ],
+            "title": "Header",
+            "type": "string"
+          },
+          "header_footer_font_size": {
+            "default": 10,
+            "maximum": 14.0,
+            "minimum": 8.0,
+            "title": "Header Footer Font Size",
+            "type": "number"
+          },
+          "headline_alignment": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Headline Alignment",
+            "type": "string"
+          },
+          "headline_bold": {
+            "default": false,
+            "title": "Headline Bold",
+            "type": "boolean"
+          },
           "id": {
             "pattern": "^[a-z][a-z0-9_]{0,49}$",
             "title": "Id",
+            "type": "string"
+          },
+          "letterhead_alignment": {
+            "default": "center",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Letterhead Alignment",
             "type": "string"
           },
           "line_spacing": {
@@ -482,6 +571,33 @@
             "title": "Recipient Alignment",
             "type": "string"
           },
+          "recipient_layout": {
+            "default": "block",
+            "enum": [
+              "block",
+              "table"
+            ],
+            "title": "Recipient Layout",
+            "type": "string"
+          },
+          "signature_alignment": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Signature Alignment",
+            "type": "string"
+          },
+          "small_font_size": {
+            "default": 10,
+            "maximum": 14.0,
+            "minimum": 8.0,
+            "title": "Small Font Size",
+            "type": "number"
+          },
           "title_alignment": {
             "enum": [
               "left",
@@ -505,7 +621,17 @@
           "first_line_indent_mm",
           "title_alignment",
           "recipient_alignment",
-          "body_alignment"
+          "body_alignment",
+          "signature_alignment",
+          "recipient_layout",
+          "header",
+          "footer",
+          "header_footer_font_size",
+          "letterhead_alignment",
+          "headline_alignment",
+          "headline_bold",
+          "addressee_width_mm",
+          "small_font_size"
         ],
         "title": "Template",
         "type": "object"
