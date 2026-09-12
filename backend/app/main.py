@@ -1,32 +1,113 @@
 from contextlib import asynccontextmanager
+from threading import BoundedSemaphore
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from app.cache import ProcessCache, processing_key
 from app.catalog import document_types, templates, validate_requisite_keys
+from app.content_policy import ContentPolicy
 from app.docx_generator import generate_docx
-from app.processing import ProcessorUnavailable, get_processor, prepare_document
-from app.schemas import Catalog, DownloadRequest, ProcessRequest, ProcessResponse
+from app.errors import APIError, RequestContextMiddleware, install_error_handlers
+from app.ports import DocumentRenderer
+from app.processing import TextProcessor, get_processor, prepare_document
+from app.schemas import (
+    Catalog,
+    DownloadRequest,
+    ErrorResponse,
+    HealthResponse,
+    ProcessRequest,
+    ProcessResponse,
+    ReadyResponse,
+)
 from app.settings import Settings
 
+DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+ERROR_RESPONSES = {
+    422: {"model": ErrorResponse, "description": "Invalid input or catalog selection"},
+    500: {"model": ErrorResponse, "description": "Internal processing error"},
+    502: {"model": ErrorResponse, "description": "LLM returned unusable content"},
+    503: {"model": ErrorResponse, "description": "Processing unavailable or busy"},
+    504: {"model": ErrorResponse, "description": "LLM timed out"},
+}
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    document_types()
-    templates()
-    yield
 
-
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    processor: TextProcessor | None = None,
+    content_policy: ContentPolicy | None = None,
+    renderer: DocumentRenderer | None = None,
+) -> FastAPI:
+    """Teams replace a policy, whole processor or DOCX callable at this composition root."""
+    if processor is not None and content_policy is not None:
+        raise ValueError("Pass processor or content_policy, not both")
     settings = settings or Settings()
-    processor = get_processor(settings.text_processor)
-    app = FastAPI(title="Документ за 3 шага", version="0.1.0", lifespan=lifespan)
+    owns_processor = processor is None
+    processor = processor or get_processor(settings, content_policy=content_policy)
+    renderer = renderer or generate_docx
+    cache = ProcessCache(settings.cache_max_entries, settings.cache_ttl_seconds)
+    slots = BoundedSemaphore(settings.max_concurrent_processes)
 
-    @app.get("/api/health")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        document_types()
+        templates()
+        try:
+            yield
+        finally:
+            cache.clear()
+            if owns_processor:
+                processor.close()
+
+    app = FastAPI(
+        title="Документ за 3 шага",
+        version="0.2.0",
+        lifespan=lifespan,
+        description="Backend команды: подготовка содержания и независимый экспорт DOCX.",
+    )
+    app.state.processor = processor
+    app.state.process_cache = cache
+    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-Request-ID"],
+        expose_headers=["Content-Disposition", "X-Request-ID", "X-Cache", "Retry-After"],
+    )
+    install_error_handlers(app)
+
+    @app.get(
+        "/api/health", response_model=HealthResponse, operation_id="getHealth", tags=["system"]
+    )
     def health():
-        return {"status": "ok", "processor_mode": settings.text_processor}
+        """Liveness only: does not call the model or claim it is available."""
+        return HealthResponse(processor_mode=settings.text_processor)
 
-    @app.get("/api/catalog", response_model=Catalog)
+    @app.get(
+        "/api/ready",
+        response_model=ReadyResponse,
+        operation_id="getReadiness",
+        tags=["system"],
+        responses={503: ERROR_RESPONSES[503]},
+    )
+    def ready():
+        """Local configuration readiness. No request to the upstream model."""
+        document_types()
+        templates()
+        if owns_processor and settings.text_processor == "unavailable":
+            raise APIError(
+                503, "processor_unavailable", "Обработка временно недоступна.", retryable=True
+            )
+        if owns_processor and settings.text_processor == "openai" and not settings.llm_model:
+            raise APIError(503, "llm_not_configured", "Укажите LLM_MODEL в настройках backend.")
+        return ReadyResponse(
+            processor_mode=settings.text_processor, checks={"catalog": True, "processor": True}
+        )
+
+    @app.get("/api/catalog", response_model=Catalog, operation_id="getCatalog", tags=["documents"])
     def catalog():
         return Catalog(
             doc_types=list(document_types().values()),
@@ -37,33 +118,81 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def selected_type(type_id: str, requisites: dict[str, str]):
         doc_type = document_types().get(type_id)
         if doc_type is None:
-            raise HTTPException(422, "Неизвестный тип документа")
+            raise APIError(422, "unknown_doc_type", "Неизвестный тип документа.")
         try:
             validate_requisite_keys(doc_type, requisites)
         except ValueError as error:
-            raise HTTPException(422, str(error)) from error
+            raise APIError(
+                422,
+                "unknown_requisites",
+                "Переданы реквизиты, которых нет у выбранного типа документа.",
+            ) from error
         return doc_type
 
-    @app.post("/api/process", response_model=ProcessResponse)
-    def process(request: ProcessRequest):
+    @app.post(
+        "/api/process",
+        response_model=ProcessResponse,
+        operation_id="processDocument",
+        tags=["documents"],
+        responses=ERROR_RESPONSES,
+    )
+    def process(request: ProcessRequest, response: Response):
+        """Prepare content once; template selection is intentionally absent from this request."""
         doc_type = selected_type(request.doc_type, request.requisites)
+        key = processing_key(request)
+        cached = cache.get(key)
+        if cached is not None:
+            response.headers["X-Cache"] = "HIT"
+            return cached
+        if not slots.acquire(blocking=False):
+            raise APIError(
+                503,
+                "processor_busy",
+                "Сервис занят обработкой документов. Повторите попытку немного позже.",
+                retryable=True,
+            )
         try:
-            return prepare_document(request, doc_type, processor)
-        except ProcessorUnavailable as error:
-            raise HTTPException(503, str(error)) from error
+            cached = cache.get(key)
+            if cached is not None:
+                response.headers["X-Cache"] = "HIT"
+                return cached
+            result = prepare_document(request, doc_type, processor)
+            cache.put(key, result)
+            response.headers["X-Cache"] = "MISS" if cache.enabled else "BYPASS"
+            return result
+        finally:
+            slots.release()
 
-    @app.post("/api/documents/download")
+    @app.post(
+        "/api/documents/download",
+        operation_id="downloadDocument",
+        tags=["documents"],
+        response_class=Response,
+        responses={
+            200: {
+                "description": "Editable DOCX",
+                "content": {
+                    DOCX_MEDIA_TYPE: {"schema": {"type": "string", "format": "binary"}},
+                },
+            },
+            422: ERROR_RESPONSES[422],
+            500: ERROR_RESPONSES[500],
+        },
+    )
     def download(request: DownloadRequest):
+        """Render user-supplied content without calling the model or claiming fact verification."""
         doc_type = selected_type(request.document.doc_type, request.document.requisites)
         template = templates().get(request.template_id)
         if template is None:
-            raise HTTPException(422, "Неизвестный шаблон оформления")
-        content = generate_docx(request.document, doc_type, template)
+            raise APIError(422, "unknown_template", "Неизвестный шаблон оформления.")
+        content = renderer(request.document, doc_type, template)
         filename = f"{doc_type.id}-{template.id}.docx"
         return Response(
             content=content,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            media_type=DOCX_MEDIA_TYPE,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
         )
 
     return app

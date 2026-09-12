@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "description": "The provider JSON contract. Application fields are never model-controlled.",
+  "properties": {
+    "body": {
+      "items": {
+        "maxLength": 20000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 10000,
+      "minItems": 1,
+      "title": "Body",
+      "type": "array"
+    },
+    "changes": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Changes",
+      "type": "array"
+    },
+    "requisites": {
+      "maxProperties": 30,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,49}$": {
+          "maxLength": 500,
+          "type": "string"
+        }
+      },
+      "title": "Requisites",
+      "type": "object"
+    }
+  },
+  "required": [
+    "requisites",
+    "body",
+    "changes"
+  ],
+  "title": "ModelOutput",
+  "type": "object"
+}

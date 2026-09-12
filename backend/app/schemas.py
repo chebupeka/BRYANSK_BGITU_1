@@ -17,7 +17,7 @@ def check_xml_text(value: str) -> str:
 
 
 class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
 
 
 class RequisiteField(Contract):
@@ -105,3 +105,34 @@ class ProcessResponse(Contract):
 class DownloadRequest(Contract):
     document: DocumentContent
     template_id: Identifier
+
+
+class HealthResponse(Contract):
+    status: Literal["ok"] = "ok"
+    processor_mode: str
+
+
+class ReadyResponse(Contract):
+    status: Literal["ready"] = "ready"
+    processor_mode: str
+    checks: dict[str, bool]
+
+
+class ErrorIssue(Contract):
+    field: str
+    message: str
+    type: str
+
+
+class ErrorInfo(Contract):
+    code: str
+    message: str
+    retryable: bool
+    request_id: str
+    details: list[ErrorIssue] = Field(default_factory=list)
+
+
+class ErrorResponse(Contract):
+    # Retained for the existing frontend; new clients should also inspect error.code.
+    detail: str
+    error: ErrorInfo

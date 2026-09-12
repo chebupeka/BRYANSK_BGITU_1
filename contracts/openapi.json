@@ -1,0 +1,733 @@
+{
+  "components": {
+    "schemas": {
+      "Catalog": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_types": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentType"
+            },
+            "title": "Doc Types",
+            "type": "array"
+          },
+          "processor_mode": {
+            "title": "Processor Mode",
+            "type": "string"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/Template"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "doc_types",
+          "templates",
+          "processor_mode"
+        ],
+        "title": "Catalog",
+        "type": "object"
+      },
+      "DocumentContent-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "items": {
+              "maxLength": 20000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Body",
+            "type": "array"
+          },
+          "doc_type": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "requisites": {
+            "maxProperties": 30,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,49}$": {
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "title": "Requisites",
+            "type": "object"
+          }
+        },
+        "required": [
+          "doc_type",
+          "body"
+        ],
+        "title": "DocumentContent",
+        "type": "object"
+      },
+      "DocumentContent-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "items": {
+              "maxLength": 20000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Body",
+            "type": "array"
+          },
+          "doc_type": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "requisites": {
+            "maxProperties": 30,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,49}$": {
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "title": "Requisites",
+            "type": "object"
+          }
+        },
+        "required": [
+          "doc_type",
+          "requisites",
+          "body"
+        ],
+        "title": "DocumentContent",
+        "type": "object"
+      },
+      "DocumentType": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/RequisiteField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "title",
+          "fields",
+          "blocks"
+        ],
+        "title": "DocumentType",
+        "type": "object"
+      },
+      "DownloadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentContent-Input"
+          },
+          "template_id": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document",
+          "template_id"
+        ],
+        "title": "DownloadRequest",
+        "type": "object"
+      },
+      "ErrorInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorIssue"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "request_id",
+          "details"
+        ],
+        "title": "ErrorInfo",
+        "type": "object"
+      },
+      "ErrorIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message",
+          "type"
+        ],
+        "title": "ErrorIssue",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorInfo"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "processor_mode": {
+            "title": "Processor Mode",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "processor_mode"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "ProcessRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_type": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "draft": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Draft",
+            "type": "string"
+          },
+          "requisites": {
+            "maxProperties": 30,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,49}$": {
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "title": "Requisites",
+            "type": "object"
+          }
+        },
+        "required": [
+          "doc_type",
+          "draft"
+        ],
+        "title": "ProcessRequest",
+        "type": "object"
+      },
+      "ProcessResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentContent-Output"
+          },
+          "missing_fields": {
+            "items": {
+              "$ref": "#/components/schemas/RequisiteField"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "processor_mode": {
+            "title": "Processor Mode",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "missing_fields",
+          "changes",
+          "warnings",
+          "processor_mode"
+        ],
+        "title": "ProcessResponse",
+        "type": "object"
+      },
+      "ReadyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "processor_mode": {
+            "title": "Processor Mode",
+            "type": "string"
+          },
+          "status": {
+            "const": "ready",
+            "default": "ready",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "processor_mode",
+          "checks"
+        ],
+        "title": "ReadyResponse",
+        "type": "object"
+      },
+      "RequisiteField": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "required"
+        ],
+        "title": "RequisiteField",
+        "type": "object"
+      },
+      "Template": {
+        "additionalProperties": false,
+        "properties": {
+          "body_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Body Alignment",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "first_line_indent_mm": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "First Line Indent Mm",
+            "type": "number"
+          },
+          "font": {
+            "title": "Font",
+            "type": "string"
+          },
+          "font_size": {
+            "maximum": 16.0,
+            "minimum": 10.0,
+            "title": "Font Size",
+            "type": "number"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "line_spacing": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Line Spacing",
+            "type": "number"
+          },
+          "margins_mm": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "top",
+                "right",
+                "bottom",
+                "left"
+              ]
+            },
+            "title": "Margins Mm",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paragraph_space_after_pt": {
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Paragraph Space After Pt",
+            "type": "number"
+          },
+          "recipient_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Recipient Alignment",
+            "type": "string"
+          },
+          "title_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Title Alignment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "font",
+          "font_size",
+          "margins_mm",
+          "line_spacing",
+          "paragraph_space_after_pt",
+          "first_line_indent_mm",
+          "title_alignment",
+          "recipient_alignment",
+          "body_alignment"
+        ],
+        "title": "Template",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Backend команды: подготовка содержания и независимый экспорт DOCX.",
+    "title": "Документ за 3 шага",
+    "version": "0.2.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/catalog": {
+      "get": {
+        "operationId": "getCatalog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/download": {
+      "post": {
+        "description": "Render user-supplied content without calling the model or claiming fact verification.",
+        "operationId": "downloadDocument",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Editable DOCX"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid input or catalog selection"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal processing error"
+          }
+        },
+        "summary": "Download",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Liveness only: does not call the model or claim it is available.",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/process": {
+      "post": {
+        "description": "Prepare content once; template selection is intentionally absent from this request.",
+        "operationId": "processDocument",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid input or catalog selection"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal processing error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "LLM returned unusable content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Processing unavailable or busy"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "LLM timed out"
+          }
+        },
+        "summary": "Process",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "description": "Local configuration readiness. No request to the upstream model.",
+        "operationId": "getReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Processing unavailable or busy"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

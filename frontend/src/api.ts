@@ -7,7 +7,7 @@ async function request(path: string, payload?: unknown): Promise<Response> {
       method: payload === undefined ? 'GET' : 'POST',
       headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: payload === undefined ? undefined : JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(180_000),
     });
   } catch {
     throw new Error('Сервис не отвечает. Проверьте подключение и повторите попытку. Введённые данные остались в форме.');
