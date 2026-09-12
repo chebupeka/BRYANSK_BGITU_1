@@ -34,12 +34,14 @@ export const Document = (props: IconProps) => <Svg {...props}>
 </Svg>;
 
 export const Sun = (props: IconProps) => <Svg {...props}>
-  <circle cx="12" cy="12" r="4" />
-  <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
+  <circle cx="12" cy="12" r="4.2" />
+  {/* Eight rays of equal length, evenly spaced around the disc. */}
+  <path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1" />
+  <path d="M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5" />
 </Svg>;
 
 export const Moon = (props: IconProps) => <Svg {...props}>
-  <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+  <path d="M20.5 14.3A8.5 8.5 0 0 1 9.7 3.5 8.5 8.5 0 1 0 20.5 14.3z" />
 </Svg>;
 
 export const Warning = (props: IconProps) => <Svg {...props}>

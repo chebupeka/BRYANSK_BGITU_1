@@ -417,11 +417,29 @@
   ::view-transition-group(page-content) { z-index: 2; }
   ::view-transition-old(page-content) { animation: page-leave 300ms var(--ease) both; }
   ::view-transition-new(page-content) { animation: page-enter 460ms var(--ease-out) both; }
-  :root[data-nav='back'] ::view-transition-old(page-content) { animation-name: page-leave-back; }
-  :root[data-nav='back'] ::view-transition-new(page-content) { animation-name: page-enter-back; }
+  /* The pseudo-element tree hangs off the root itself, so these attach to :root with no
+     combinator: with a descendant space they would never match and going back would play
+     the forward motion. */
+  :root[data-nav='back']::view-transition-old(page-content) { animation-name: page-leave-back; }
+  :root[data-nav='back']::view-transition-new(page-content) { animation-name: page-enter-back; }
   /* The header and the sheet keep their own identity, so they move instead of blinking. */
   ::view-transition-group(header) { z-index: 4; animation-duration: 300ms; }
-  ::view-transition-group(sheet) { z-index: 3; animation-duration: 520ms; animation-timing-function: var(--ease-out); }
+  /* Between studio steps the sheet exists on both sides of the swap, so the group carries
+     it from one place to the other over exactly the entering page's own 460ms. */
+  ::view-transition-group(sheet) {
+    z-index: 3;
+    animation-duration: 460ms;
+    animation-delay: 0s;
+    animation-timing-function: var(--ease-out);
+  }
+  /* Entering or leaving the studio there is only one snapshot, and a bare crossfade would
+     put the sheet on screen sharp and whole while the interface is still arriving, then
+     hold it after the interface has gone. Give it the motion of the page it belongs to,
+     on the same clock, so the sheet arrives and leaves as part of the page. */
+  ::view-transition-new(sheet):only-child { animation: page-enter 460ms var(--ease-out) both; }
+  ::view-transition-old(sheet):only-child { animation: page-leave 300ms var(--ease) both; }
+  :root[data-nav='back']::view-transition-new(sheet):only-child { animation-name: page-enter-back; }
+  :root[data-nav='back']::view-transition-old(sheet):only-child { animation-name: page-leave-back; }
 }
 
 @keyframes page-enter {

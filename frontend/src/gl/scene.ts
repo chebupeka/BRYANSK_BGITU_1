@@ -11,13 +11,22 @@ interface SceneOptions {
   reducedMotion: boolean;
 }
 
-// The integral of a fall that loses momentum and settles into a gentle drift.
-const FALL_DURATION = 32;
-const fallDistance = (age: number) => 0.025 * age + 0.2 * (1 - Math.exp(-age / 2));
-const smoothstep = (start: number, end: number, value: number) => {
-  const t = Math.min(1, Math.max(0, (value - start) / (end - start)));
-  return t * t * (3 - 2 * t);
-};
+// Seconds a sheet takes to cross its whole trajectory at one second per second of scene
+// time. The descent is even over the cycle — no sheet brakes on the way down and settles
+// into a hover — so the snowfall never stops falling however long the page stays open.
+// Each sheet scales this by its own speed, and the spread of speeds is what breaks up the
+// fall into something disorderly rather than a marching grid.
+const FALL_DURATION = 26;
+// On load the sky is empty: sheets enter one after another over these seconds.
+const ENTRY_WINDOW = 5;
+// The fall arrives in a hurry: the scene clock starts this many times faster than real
+// time, so the sheets come down quickly and the sky is full within a few seconds instead
+// of filling for half a minute. Then the rush bleeds off and the snowfall calms to its
+// steady pace. It happens once, when the scene starts, and never comes back.
+const RUSH_RATE = 4.5;
+// How fast the rush bleeds off. After roughly three of these seconds the clock is back to
+// one second per second, gradually enough to read as settling rather than braking.
+const RUSH_SETTLE = 3.4;
 
 function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
   const shader = gl.createShader(type);
@@ -121,12 +130,30 @@ export function startScene(canvas: HTMLCanvasElement, options: SceneOptions): Sc
   const papers = Array.from({ length: 48 }, (_, index) => ({
     x: (random() * 2 - 1) * 0.98,
     z: -7 + random() * 9,
-    phase: (index / 48 * FALL_DURATION + random() * 1.4) % FALL_DURATION,
+    // The second the sheet is released. Until then it waits above the top edge.
+    entry: index / 48 * ENTRY_WINDOW + random() * 1.6,
     scale: 0.7 + random() * 0.95,
-    speed: 0.82 + random() * 0.36,
+    // A near threefold spread: quick sheets overtake slow ones within the first cycle and
+    // the ranks they entered in are gone for good.
+    speed: 0.6 + random() * 1.05,
     turn: random() * Math.PI * 2,
     tilt: (random() - 0.5) * 1.1,
-    sway: 0.25 + random() * 0.45,
+    roll: (random() - 0.5) * 1.4,
+    // Two swings at unrelated frequencies: a wide drift with a faster wobble riding on it,
+    // which never repeats the same path twice.
+    sway: 0.22 + random() * 0.5,
+    swayRate: 0.16 + random() * 0.3,
+    swayFast: 0.05 + random() * 0.14,
+    swayFastRate: 0.55 + random() * 0.7,
+    // Air caught under the sheet: it hangs, then drops a little quicker.
+    bob: 0.05 + random() * 0.13,
+    bobRate: 0.3 + random() * 0.5,
+    // Signed, so roughly half the sheets turn against the other half.
+    spin: (random() < 0.5 ? -1 : 1) * (0.1 + random() * 0.34),
+    pitch: 0.3 + random() * 0.42,
+    pitchRate: 0.2 + random() * 0.34,
+    rollAmp: 0.3 + random() * 0.45,
+    rollRate: 0.14 + random() * 0.3,
     variant: index % 3,
     seed: random() * 100,
     mobile: index % 2 === 0,
@@ -144,8 +171,11 @@ export function startScene(canvas: HTMLCanvasElement, options: SceneOptions): Sc
   let running = false;
   let destroyed = false;
   let frame = 0;
-  let elapsed = 0;
   let time = 0;
+  // Real seconds the scene has been running, which is what the opening rush decays over.
+  // Pausing the scene pauses this too, so a tab returning from the background picks the
+  // fall up where it left it rather than restarting the rush.
+  let elapsed = 0;
   let lastTime = 0;
   let width = 1;
   let height = 1;
@@ -166,21 +196,33 @@ export function startScene(canvas: HTMLCanvasElement, options: SceneOptions): Sc
 
     for (const paper of papers) {
       if (mobile && !paper.mobile) continue;
-      const age = (paper.phase + time * paper.speed) % FALL_DURATION;
+      // Released at its own moment, then falling for as long as the scene runs.
+      const progress = (time - paper.entry) * paper.speed;
+      // Before its entry moment the sheet has not started falling yet.
+      if (progress < 0) continue;
+      const age = progress % FALL_DURATION;
       const distance = 12 - paper.z;
       const scale = paper.scale * (mobile ? 0.68 : 1);
-      // Recycle outside the viewport, with room for the entire rotated sheet.
-      const extentY = distance * 0.52 + scale * 1.1;
-      const y = extentY * (1 - 2 * fallDistance(age));
+      // Recycle outside the viewport, with room for the entire rotated sheet and for the
+      // bob below — carrying the bob here keeps the bottom of the trajectory off screen.
+      const extentY = distance * 0.52 + scale * 1.1 + paper.bob;
+      // Even ground covered per second, so the descent reads the same in the first second
+      // and the fifth minute, with a slow bob riding on top of it.
+      const y = extentY * (1 - 2 * (age / FALL_DURATION))
+        + Math.sin(time * paper.bobRate + paper.seed) * paper.bob;
       const x = paper.x * distance * 0.52 * aspect
-        + Math.sin(time * 0.28 + paper.turn) * paper.sway * (mobile ? 0.5 : 1);
+        + (Math.sin(time * paper.swayRate + paper.turn) * paper.sway
+          + Math.sin(time * paper.swayFastRate + paper.seed) * paper.swayFast)
+        * (mobile ? 0.5 : 1);
       // One shared depth buffer makes the nearer sheet fully cover a farther one.
       // The whole sheet is outside the viewport when its trajectory recycles.
       gl!.uniform3f(uniforms.uPosition, x, y, paper.z);
+      // Three independent rates per sheet: the tumble never lines up with the swing, and
+      // the sheet turning next to it never lines up with either.
       gl!.uniform3f(uniforms.uRotation,
-        paper.tilt + Math.sin(time * 0.34 + paper.turn) * 0.48,
-        paper.turn + time * 0.18 * paper.speed,
-        paper.tilt + Math.sin(time * 0.22 + paper.turn) * 0.55);
+        paper.tilt + Math.sin(time * paper.pitchRate + paper.turn) * paper.pitch,
+        paper.turn + time * paper.spin,
+        paper.roll + Math.sin(time * paper.rollRate + paper.seed) * paper.rollAmp);
       gl!.uniform1f(uniforms.uScale, scale);
       gl!.uniform1f(uniforms.uVariant, paper.variant);
       gl!.uniform1f(uniforms.uSeed, paper.seed);
@@ -205,9 +247,12 @@ export function startScene(canvas: HTMLCanvasElement, options: SceneOptions): Sc
     if (!running || destroyed) return;
     const delta = Math.min(Math.max((now - lastTime) / 1000, 0), 0.05);
     lastTime = now;
+    // Fast at first, easing back to one second per second. The whole scene runs on this
+    // clock — descent, sway and tumble alike — so it all slows together and nothing reads
+    // as decoupled while the fall settles. Past the opening seconds the rate is 1 and the
+    // snowfall keeps falling at an even pace instead of easing into a hover.
     elapsed += delta;
-    // After three seconds, slow the whole snowfall to 30% over six seconds.
-    time += delta * (1 - smoothstep(3, 9, elapsed) * 0.7);
+    time += delta * (1 + (RUSH_RATE - 1) * Math.exp(-elapsed / RUSH_SETTLE));
     light += (targetLight - light) * (1 - Math.exp(-delta * 6));
     draw();
     frame = requestAnimationFrame(render);

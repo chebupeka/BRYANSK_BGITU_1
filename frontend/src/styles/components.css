@@ -620,10 +620,14 @@
   z-index: 68;
   width: 76px;
   height: 76px;
+  /* Half the box each way: the halo is centred on its own origin, so the translate can
+     carry the pointer position that CursorBeam measured. */
   margin: -38px 0 0 -38px;
-  translate: var(--beam-x, 50vw) var(--beam-y, 50vh);
+  translate: var(--beam-x, 0px) var(--beam-y, 0px);
   border-radius: 50%;
-  background: radial-gradient(circle at center, var(--beam) 0%, transparent 68%);
+  /* A brighter core inside the falloff, so the light reads as coming from one point. */
+  background: radial-gradient(circle at center,
+    var(--beam-core) 0%, var(--beam) 38%, transparent 70%);
   mix-blend-mode: var(--beam-blend);
   filter: blur(7px);
   opacity: 0;
