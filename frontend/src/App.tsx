@@ -44,7 +44,15 @@ export default function App() {
   useEffect(() => { mainRef.current?.focus(); }, [step]);
 
   function update(patch: Partial<DraftState>, changesContent = true) {
-    setState(previous => ({ ...previous, ...patch }));
+    const draftChanged = patch.draft !== undefined && patch.draft !== state.draft;
+    setState(previous => {
+      const next = { ...previous, ...patch };
+      // Реквизиты относятся к тому черновику, для которого их ввели. Текст изменился —
+      // значит, старые значения устарели: их заменит разбор нового черновика.
+      if (draftChanged) next.requisitesByType = {};
+      return next;
+    });
+    if (draftChanged) setSuggested([]);
     if (changesContent) setResult(null);
     setError('');
     setDownloaded(false);

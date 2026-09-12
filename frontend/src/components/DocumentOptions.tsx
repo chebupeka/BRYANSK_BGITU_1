@@ -40,7 +40,7 @@ export default function DocumentOptions(props: Props) {
     <p className="helper">Тип определяет структуру и реквизиты. Оформление меняет только внешний вид.</p>
 
     <h3>Реквизиты</h3>
-    <p className="helper">Поля со звёздочкой нужны документу. Их можно пропустить: в файле появятся метки «Заполнить».</p>
+    <p className="helper">Поля со звёздочкой нужны документу. Их можно пропустить: в файле появятся метки «Заполнить». После правки черновика поля заполняются заново по его тексту.</p>
     {filled.length > 0 && <div role="status"><Alert type="info" showIcon
       title={`Из черновика подставлено: ${filled.join(', ')}. Проверьте значения.`} /></div>}
     <div className="requisites-grid">
