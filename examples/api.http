@@ -1,0 +1,95 @@
+# Примеры для расширения REST Client в VS Code / совместимого HTTP-клиента.
+# Все данные вымышленные. По умолчанию сервер работает в stub, ключ не нужен.
+@baseUrl = http://localhost:8000
+
+### Жизнь API: 200 даже если обработчик недоступен
+GET {{baseUrl}}/api/health
+X-Request-ID: team-health-check
+
+### Готовность конфигурации: 200 или единая ошибка 503
+GET {{baseUrl}}/api/ready
+
+### Каталог типов и оформлений
+GET {{baseUrl}}/api/catalog
+
+### Подготовка: первый запрос X-Cache: MISS, повтор в течение TTL — HIT
+# @name processDocument
+POST {{baseUrl}}/api/process
+Content-Type: application/json
+X-Request-ID: team-service-memo-1
+
+{
+  "doc_type": "service_memo",
+  "draft": "Прошу согласовать закупку двух мониторов до 25 сентября 2026 года.\nОбщая стоимость не должна превышать 40 000 рублей.",
+  "requisites": {
+    "subject": "О закупке мониторов"
+  }
+}
+
+### Скачивание без обращения к модели: сохранить тело ответа как .docx
+POST {{baseUrl}}/api/documents/download
+Content-Type: application/json
+
+{
+  "document": {
+    "doc_type": "service_memo",
+    "requisites": {
+      "subject": "О закупке мониторов"
+    },
+    "body": [
+      "Прошу согласовать закупку двух мониторов до 25 сентября 2026 года.",
+      "Общая стоимость не должна превышать 40 000 рублей."
+    ]
+  },
+  "template_id": "classic"
+}
+
+### Другое оформление того же содержания: новый вызов /api/process не нужен
+POST {{baseUrl}}/api/documents/download
+Content-Type: application/json
+
+{
+  "document": {
+    "doc_type": "service_memo",
+    "requisites": {
+      "subject": "О закупке мониторов"
+    },
+    "body": [
+      "Прошу согласовать закупку двух мониторов до 25 сентября 2026 года.",
+      "Общая стоимость не должна превышать 40 000 рублей."
+    ]
+  },
+  "template_id": "modern"
+}
+
+### Ошибка валидации: 422, detail строка, error.code и error.details
+POST {{baseUrl}}/api/process
+Content-Type: application/json
+X-Request-ID: team-invalid-draft
+
+{
+  "doc_type": "service_memo",
+  "draft": "   ",
+  "requisites": {}
+}
+
+### Неизвестный тип: 422 unknown_doc_type
+POST {{baseUrl}}/api/process
+Content-Type: application/json
+
+{
+  "doc_type": "unknown_type",
+  "draft": "Демонстрационный текст.",
+  "requisites": {}
+}
+
+### Отказ обработки: сначала TEXT_PROCESSOR=unavailable и перезапуск backend
+# В unavailable ожидается 503; верните stub и повторите тот же запрос.
+POST {{baseUrl}}/api/process
+Content-Type: application/json
+
+{
+  "doc_type": "service_memo",
+  "draft": "Черновик для проверки сохранения формы при отказе.",
+  "requisites": {}
+}
