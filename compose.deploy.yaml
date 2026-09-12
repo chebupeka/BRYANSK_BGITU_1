@@ -1,0 +1,66 @@
+# Выкатка на сервер: сайт открыт по домену, порты наружу не публикуются.
+# Локальный запуск не меняется — для него остаётся обычный compose.yaml.
+#
+#   docker compose -f compose.deploy.yaml --env-file .env up -d --build
+#
+# Обработчик текста задаётся в .env (TEXT_PROCESSOR, LLM_*). Сервер модель не содержит:
+# адрес модели указывается в LLM_BASE_URL и может вести на другую машину.
+
+name: doc3
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      TEXT_PROCESSOR: ${TEXT_PROCESSOR:-stub}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-180}
+    # Позволяет указать в LLM_BASE_URL модель, запущенную на самом хосте.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - internal
+      - dokploy-network
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.services.doc3.loadbalancer.server.port: "80"
+      traefik.http.routers.doc3-web.rule: Host(`${PUBLIC_HOST:-doc3.codeboom.su}`)
+      traefik.http.routers.doc3-web.entrypoints: web
+      traefik.http.routers.doc3-web.middlewares: redirect-to-https@file
+      traefik.http.routers.doc3-web.service: doc3
+      traefik.http.routers.doc3-secure.rule: Host(`${PUBLIC_HOST:-doc3.codeboom.su}`)
+      traefik.http.routers.doc3-secure.entrypoints: websecure
+      traefik.http.routers.doc3-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.doc3-secure.service: doc3
+
+networks:
+  # Своя сеть для пары frontend ↔ backend: наружу backend не выходит.
+  internal:
+  # Общая сеть обратного прокси на сервере.
+  dokploy-network:
+    external: true
