@@ -1,8 +1,22 @@
 services:
   backend:
     build: ./backend
+    command: ["python", "-m", "uvicorn", "${APP_MODULE:-app.main:app}", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       TEXT_PROCESSOR: ${TEXT_PROCESSOR:-stub}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4096}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-1}
+      LLM_RESPONSE_FORMAT: ${LLM_RESPONSE_FORMAT:-json_object}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      CACHE_MAX_ENTRIES: ${CACHE_MAX_ENTRIES:-128}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-300}
+      MAX_CONCURRENT_PROCESSES: ${MAX_CONCURRENT_PROCESSES:-4}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -24,3 +38,19 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+  # Optional local provider; models are installed manually with `ollama pull`.
+  # Set LLM_BASE_URL=http://ollama:11434/v1 to use it from the backend.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [ollama]
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  ollama_models:
