@@ -1,0 +1,119 @@
+/* Ash and graphite. The palette is deliberately almost monochrome: the only colour left is
+   the cool cast of the glass in the hero. Emphasis comes from contrast, not from glow. */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0a0b0d;
+  --bg-soft: #0e0f12;
+  --bg-deep: #08090b;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --surface-solid: #121418;
+  --panel-bg: linear-gradient(150deg, rgba(25, 28, 33, 0.95), rgba(17, 19, 23, 0.93));
+  --glass: rgba(11, 12, 15, 0.74);
+  --line: rgba(255, 255, 255, 0.11);
+  --line-strong: rgba(255, 255, 255, 0.22);
+
+  --text: #edeef0;
+  --text-2: #a3a8af;
+  --text-3: #757b84;
+
+  /* «Accent» is a light ash: a white button on graphite, a dark one on paper. */
+  --accent: #e9ebee;
+  --accent-strong: #ffffff;
+  --accent-deep: #c7ccd3;
+  --accent-ink: #0b0c0e;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-line: rgba(255, 255, 255, 0.3);
+
+  --warn: #d3ad74;
+  --warn-soft: rgba(211, 173, 116, 0.12);
+  --error: #dd8d86;
+  --error-soft: rgba(221, 141, 134, 0.12);
+  --good: #93c2aa;
+  --good-soft: rgba(147, 194, 170, 0.12);
+
+  --paper: #ffffff;
+  --paper-ink: #101214;
+  --paper-line: rgba(16, 18, 20, 0.14);
+  --page-break: rgba(16, 18, 20, 0.16);
+  --page-gap: rgba(16, 18, 20, 0.07);
+  --page-mark: rgba(16, 18, 20, 0.11);
+
+  --dot: rgba(255, 255, 255, 0.07);
+  --beam: rgba(255, 255, 255, 0.07);
+  --beam-core: rgba(255, 255, 255, 0.13);
+  --beam-blend: plus-lighter;
+  --grain: 0.05;
+  --chrome: conic-gradient(from 205deg, #ffffff, #97a0aa 11%, #23282e 24%, #e9edf1 40%,
+    #6c747e 56%, #10141a 70%, #cdd4dc 84%, #ffffff);
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px -40px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 34px 60px -40px rgba(0, 0, 0, 0.95);
+  --shadow-page: 0 40px 80px -50px rgba(0, 0, 0, 0.8), 0 4px 16px -10px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 1px var(--line-strong);
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI',
+    Inter, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 140ms;
+  --normal: 260ms;
+  --slow: 520ms;
+
+  --header-height: 64px;
+  --shell-width: 1280px;
+  --layout-gap: 24px;
+  --page-gutter: 24px;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #eceef1;
+  --bg-soft: #e4e7ec;
+  --bg-deep: #dcdfe5;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-strong: #ffffff;
+  --surface-solid: #ffffff;
+  --panel-bg: linear-gradient(150deg, rgba(255, 255, 255, 0.97), rgba(248, 249, 251, 0.94));
+  --glass: rgba(239, 241, 244, 0.8);
+  --line: rgba(16, 18, 22, 0.12);
+  --line-strong: rgba(16, 18, 22, 0.26);
+
+  --text: #14171b;
+  --text-2: #4f555d;
+  --text-3: #717780;
+
+  --accent: #16191d;
+  --accent-strong: #000000;
+  --accent-deep: #2b3037;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(16, 18, 22, 0.06);
+  --accent-line: rgba(16, 18, 22, 0.32);
+
+  --warn: #8a6320;
+  --warn-soft: rgba(138, 99, 32, 0.1);
+  --error: #a8443d;
+  --error-soft: rgba(168, 68, 61, 0.09);
+  --good: #226c52;
+  --good-soft: rgba(34, 108, 82, 0.1);
+
+  --dot: rgba(16, 18, 22, 0.1);
+  --beam: rgba(16, 18, 22, 0.05);
+  --beam-core: rgba(16, 18, 22, 0.08);
+  --beam-blend: multiply;
+  --grain: 0.035;
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 38px -34px rgba(16, 20, 28, 0.4);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 26px 50px -34px rgba(16, 20, 28, 0.45);
+  --shadow-page: 0 34px 64px -46px rgba(16, 20, 28, 0.5), 0 3px 14px -10px rgba(16, 20, 28, 0.28);
+}

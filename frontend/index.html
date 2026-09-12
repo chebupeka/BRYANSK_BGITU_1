@@ -1,11 +1,25 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Подготовьте черновик, выберите оформление и скачайте редактируемый документ." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Черновик, реквизиты и оформление — редактируемый DOCX за три шага. Живой предпросмотр страницы обновляется по мере ввода." />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070b12" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Документ за 3 шага</title>
+    <script>
+      // Theme before first paint: no flash between the cinematic shell and the paper mode.
+      try {
+        var saved = localStorage.getItem('document-three-steps:theme');
+        if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+      } catch (error) { /* private mode: keep the default */ }
+    </script>
+    <style>
+      html { background: #070b12; }
+      html[data-theme='light'] { background: #eef1f6; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
