@@ -240,6 +240,10 @@ class LLMProcessor:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._model = model
         self._api_key = api_key
+        # keep_alive понимает только Ollama. Остальные OpenAI-совместимые серверы отвечают
+        # на него ошибкой 400 «Unrecognized request argument», и подготовка падает целиком.
+        host = base_url.lower()
+        self._is_ollama = "ollama" in host or ":11434" in host
         self._timeout = timeout
         self._client = client or httpx.Client(timeout=timeout)
         self._parts: OrderedDict[tuple, LLMReply] = OrderedDict()
@@ -397,11 +401,12 @@ class LLMProcessor:
             # Ноль и постоянное зерно ради повторяемости: один черновик — один документ.
             "temperature": 0,
             "seed": 0,
-            # Ollama выгружает модель через пять минут простоя; на показе это лишняя пауза.
-            "keep_alive": MODEL_KEEP_ALIVE,
             # Ollama переводит это в строгий JSON-режим; схему всё равно проверяет Pydantic.
             "response_format": {"type": "json_object"},
         }
+        if self._is_ollama:
+            # Ollama выгружает модель через пять минут простоя; на показе это лишняя пауза.
+            payload["keep_alive"] = MODEL_KEEP_ALIVE
         try:
             response = self._client.post(self._url, json=payload, headers=headers)
             response.raise_for_status()

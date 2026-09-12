@@ -47,7 +47,8 @@ INVENTED_SIGNER_REPLY = json.dumps({
 }, ensure_ascii=False)
 
 
-def scripted(*replies: str, error: Exception | None = None):
+def scripted(*replies: str, error: Exception | None = None,
+             base_url: str = "http://ollama:11434/v1/"):
     """Модель заменяется расписанными ответами: тесты не зависят от установленной Ollama."""
     sent: list[dict] = []
     queue = list(replies)
@@ -60,7 +61,7 @@ def scripted(*replies: str, error: Exception | None = None):
         return httpx.Response(200, json={"choices": [{"message": {"content": queue.pop(0)}}]})
 
     processor = LLMProcessor(
-        "http://ollama:11434/v1/",
+        base_url,
         "test-model",
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
@@ -322,6 +323,14 @@ def test_request_asks_to_keep_the_model_loaded():
     prepared(processor)
     assert sent[0]["keep_alive"] == "30m"
     assert sent[0]["seed"] == 0
+
+
+def test_other_openai_servers_do_not_get_the_ollama_only_field():
+    # Сторонний совместимый сервер отвечает на keep_alive ошибкой 400 и подготовка падает.
+    processor, sent = scripted(CLEAN_REPLY, base_url="https://api.example.com/openai/v1")
+    prepared(processor)
+    assert "keep_alive" not in sent[0]
+    assert sent[0]["response_format"] == {"type": "json_object"}
 
 
 def test_cached_part_cannot_be_spoiled_by_the_caller():
