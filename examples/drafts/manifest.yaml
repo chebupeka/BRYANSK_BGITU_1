@@ -1,0 +1,263 @@
+# Корпус тестовых черновиков: вход для проверки и ожидаемый структурный результат.
+#
+# Поля случая:
+#   id            идентификатор; он же попадает в имя теста
+#   file          файл черновика рядом с этим манифестом
+#   doc_type      тип документа, который пользователь выбирает на шаге 2
+#   label         человекочитаемое описание случая
+#   dirt          что именно «грязного» проверяет этот вход
+#   must_keep     значения, которые обязаны дойти до готового DOCX без искажения
+#   in_draft      реквизиты, названные в черновике прямо (значение можно взять из текста)
+#   not_in_draft  обязательные реквизиты, которых в черновике нет; система обязана
+#                 сообщить о пропуске и не подставлять выдуманное значение
+#
+# Реквизиты, не попавшие ни в in_draft, ни в not_in_draft, считаются спорными:
+# извлечение допустимо, но не проверяется. Тема (subject) выводится по смыслу текста,
+# поэтому её не включают в not_in_draft.
+#
+# Сравнение значений нечувствительно к регистру, а пробелы внутри чисел не учитываются:
+# «180 000» и «180000» — одно и то же значение.
+
+cases:
+  - id: service_memo_01_structured
+    file: service_memo_01_structured.txt
+    doc_type: service_memo
+    label: Служебная записка с размеченными реквизитами
+    dirt: Разметки нет, текст уже близок к деловому — базовый случай для сравнения
+    must_keep: ["12.03.2025", "47-СЗ", "180 000", "Петров", "Иванов"]
+    in_draft:
+      recipient: Иванову И.И.
+      sender: Петров П.П.
+      subject: О закупке офисной техники
+      date: 12.03.2025
+      signer: Петров П.П.
+    not_in_draft: []
+
+  - id: service_memo_02_colloquial
+    file: service_memo_02_colloquial.txt
+    doc_type: service_memo
+    label: Служебная записка разговорным языком
+    dirt: «Здрасьте», «компа», «Вообщем», сумма без пробела, потерянные двоеточия
+    must_keep: ["12.03.2025", "47-СЗ", "180000", "Петров", "ТехноСнаб"]
+    in_draft:
+      recipient: Иванову И.И.
+      sender: Петров П.П.
+      subject: О закупке офисной техники
+      date: 12.03.2025
+    not_in_draft: []
+
+  - id: service_memo_03_incomplete
+    file: service_memo_03_incomplete.txt
+    doc_type: service_memo
+    label: Служебная записка без адресата и даты
+    dirt: Обязательные реквизиты отсутствуют — основной случай для сценария 3
+    must_keep: ["180 000", "Петров", "ТехноСнаб"]
+    in_draft:
+      sender: Петров П.П.
+      subject: О закупке офисной техники
+      signer: Петров П.П.
+    not_in_draft: [recipient, date]
+
+  - id: service_memo_04_flat
+    file: service_memo_04_flat.txt
+    doc_type: service_memo
+    label: Служебная записка сплошным текстом
+    dirt: Ни одной подписи полей — всё в одном абзаце от третьего лица
+    must_keep: ["12.03.2025", "180 000", "Петров", "ТехноСнаб"]
+    in_draft:
+      sender: Петров П.П.
+      date: 12.03.2025
+      signer: Петров П.П.
+    not_in_draft: [recipient]
+
+  - id: report_memo_01_structured
+    file: report_memo_01_structured.txt
+    doc_type: report_memo
+    label: Докладная записка с размеченными реквизитами
+    dirt: Базовый случай; проверяется сохранение адреса и двух дат
+    must_keep: ["14.03.2025", "12-ДЗ", "01.04.2025", "Николаев", "Сидоров", "Складская"]
+    in_draft:
+      organization: Ромашка
+      recipient: Сидорову С.С.
+      sender: Николаева Н.Н.
+      subject: О результатах проверки склада
+      date: 14.03.2025
+      signer: Николаева Н.Н.
+    not_in_draft: []
+
+  - id: report_memo_02_colloquial
+    file: report_memo_02_colloquial.txt
+    doc_type: report_memo
+    label: Докладная записка разговорным языком
+    dirt: «всё плохо», «барахлит», «испортится», пропущенные запятые и кавычки
+    must_keep: ["14.03.2025", "12-ДЗ", "01.04.2025", "Николаев", "Сидоров"]
+    in_draft:
+      organization: Ромашка
+      recipient: Сидорову С.С.
+      sender: Николаева Н.Н.
+      subject: О результатах проверки склада
+      date: 14.03.2025
+    not_in_draft: []
+
+  - id: report_memo_03_incomplete
+    file: report_memo_03_incomplete.txt
+    doc_type: report_memo
+    label: Докладная записка без организации, адресата и даты
+    dirt: Три обязательных реквизита отсутствуют одновременно
+    must_keep: ["01.04.2025", "Николаев"]
+    in_draft:
+      sender: Николаева Н.Н.
+      subject: О результатах проверки склада
+      signer: Николаева Н.Н.
+    not_in_draft: [organization, recipient, date]
+
+  - id: report_memo_04_flat
+    file: report_memo_04_flat.txt
+    doc_type: report_memo
+    label: Докладная записка сплошным текстом
+    dirt: Даты в тексте относятся к событию, а не к документу — дату нельзя брать оттуда
+    must_keep: ["01.04.2025", "Николаев", "Складская"]
+    in_draft:
+      sender: Николаева Н.Н.
+      signer: Николаева Н.Н.
+    not_in_draft: [organization, recipient, date]
+
+  - id: information_note_01_structured
+    file: information_note_01_structured.txt
+    doc_type: information_note
+    label: Информационная справка с размеченными реквизитами
+    dirt: Базовый случай; проверяется сохранение процентов и трёх дат
+    must_keep: ["15.03.2025", "01.03.2025", "31.03.2025", "24", "92", "Козлов"]
+    in_draft:
+      subject: О выполнении плана мероприятий
+      date: 15.03.2025
+      signer: Козлов К.К.
+    not_in_draft: [organization, purpose]
+
+  - id: information_note_02_colloquial
+    file: information_note_02_colloquial.txt
+    doc_type: information_note
+    label: Информационная справка разговорным языком
+    dirt: «Вообщем», «сделал много», «доделаем» — оценочные и бытовые формулировки
+    must_keep: ["15.03.2025", "01.03.2025", "31.03.2025", "24", "92", "Козлов"]
+    in_draft:
+      subject: О выполнении плана мероприятий
+      date: 15.03.2025
+    not_in_draft: [organization, purpose]
+
+  - id: information_note_03_incomplete
+    file: information_note_03_incomplete.txt
+    doc_type: information_note
+    label: Информационная справка без даты
+    dirt: Даты документа нет вовсе, подпись не проставлена
+    must_keep: ["31.03.2025", "24", "92", "Козлов"]
+    in_draft:
+      subject: О выполнении плана мероприятий
+    not_in_draft: [organization, date, purpose]
+
+  - id: information_note_04_flat
+    file: information_note_04_flat.txt
+    doc_type: information_note
+    label: Информационная справка сплошным текстом
+    dirt: Один абзац от третьего лица, разметки полей нет
+    must_keep: ["15.03.2025", "01.03.2025", "24", "92", "Козлов"]
+    in_draft:
+      signer: Козлов К.К.
+    not_in_draft: [organization, purpose]
+
+  - id: letter_01_structured
+    file: letter_01_structured.txt
+    doc_type: letter
+    label: Письмо с размеченными реквизитами
+    dirt: Базовый случай; проверяется сохранение адреса почты и количеств
+    must_keep: ["16.03.2025", "88-П", "25.03.2025", "office@romashka.example", "Иванов", "50", "100"]
+    in_draft:
+      organization: Ромашка
+      recipient: Фёдорову Ф.Ф.
+      date: 16.03.2025
+      number: 88-П
+      subject: О сотрудничестве в сфере поставок
+      signer: Иванов И.И.
+    not_in_draft: []
+
+  - id: letter_02_colloquial
+    file: letter_02_colloquial.txt
+    doc_type: letter
+    label: Письмо разговорным языком
+    dirt: «Пришлите пожалуйста», «Будем рады», кавычки и точки потеряны
+    must_keep: ["16.03.2025", "88-П", "25.03.2025", "office@romashka.example", "Иванов", "50", "100"]
+    in_draft:
+      organization: Ромашка
+      recipient: Фёдорову Ф.Ф.
+      date: 16.03.2025
+      number: 88-П
+      subject: О сотрудничестве в сфере поставок
+    not_in_draft: []
+
+  - id: letter_03_incomplete
+    file: letter_03_incomplete.txt
+    doc_type: letter
+    label: Письмо без исходящего номера
+    dirt: Номера нет; адресат назван только по имени в обращении
+    must_keep: ["16.03.2025", "25.03.2025", "Иванов", "50", "100"]
+    in_draft:
+      organization: Ромашка
+      date: 16.03.2025
+      subject: О сотрудничестве в сфере поставок
+      signer: Иванов И.И.
+    not_in_draft: [number]
+
+  - id: letter_04_flat
+    file: letter_04_flat.txt
+    doc_type: letter
+    label: Письмо сплошным текстом
+    dirt: Нет даты и номера; единственная дата в тексте — срок ответа
+    must_keep: ["25.03.2025", "office@romashka.example", "Иванов", "50", "100"]
+    in_draft:
+      organization: Ромашка
+      signer: Иванов И.И.
+    not_in_draft: [date, number]
+
+  - id: edge_01_single_line
+    file: edge_01_single_line.txt
+    doc_type: service_memo
+    label: Одна строка без знаков препинания
+    dirt: Нет заглавных букв, точек и переводов строки; дата в тексте — срок поставки
+    must_keep: ["30 000", "25.09.2026", "Петров"]
+    in_draft:
+      signer: Петров П.П.
+    not_in_draft: [recipient, date]
+
+  - id: edge_02_typos_and_noise
+    file: edge_02_typos_and_noise.txt
+    doc_type: report_memo
+    label: Опечатки, капс, markdown-разметка и двойные пробелы
+    dirt: «темпиратура», «СРОЧНО!!!», решётки заголовка, дефисы списка, лишние пробелы
+    must_keep: ["25.09.2026", "45 000", "35", "Сидоров"]
+    in_draft:
+      signer: Сидоров С.С.
+    not_in_draft: [organization, recipient, date]
+
+  - id: edge_03_mixed_alphabets
+    file: edge_03_mixed_alphabets.txt
+    doc_type: letter
+    label: Кириллица вперемешку с латиницей
+    dirt: CEO, Equipment delivery, RUB и латинский адрес почты внутри русского текста
+    must_keep: ["30.11.2026", "120 000", "sales@romashka.example", "Иванов", "15"]
+    in_draft:
+      organization: Ромашка
+      recipient: Иванову И.И.
+      subject: О поставке оборудования
+      signer: Иванов И.И.
+    not_in_draft: [date, number]
+
+  - id: edge_04_number_formats
+    file: edge_04_number_formats.txt
+    doc_type: information_note
+    label: Разные форматы чисел и дат в одном тексте
+    dirt: «1 марта 2025» и «31.03.2025», сумма прописью, проценты через запятую, 250000
+    must_keep: ["1 250 000", "31.03.2025", "15.03.2025", "250000", "92,5", "Козлов"]
+    in_draft:
+      subject: О расходах за первый квартал
+      signer: Козлов К.К.
+    not_in_draft: [organization, purpose]
