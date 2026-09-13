@@ -153,6 +153,16 @@ class ProcessResponse(Contract):
 class DownloadRequest(Contract):
     document: DocumentContent
     template_id: Identifier
+    # Browser-created templates are validated by the same strict model as catalog files.
+    # Keeping template_id preserves compatibility with existing clients and filenames.
+    custom_template: Template | None = None
+
+    @field_validator("custom_template")
+    @classmethod
+    def validate_custom_template(cls, value: Template | None) -> Template | None:
+        if value is not None and not value.id.startswith("custom_"):
+            raise ValueError("Пользовательское оформление должно иметь id с префиксом custom_")
+        return value
 
 
 class HealthResponse(Contract):

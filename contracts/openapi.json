@@ -17,7 +17,7 @@
           },
           "templates": {
             "items": {
-              "$ref": "#/components/schemas/Template"
+              "$ref": "#/components/schemas/Template-Output"
             },
             "title": "Templates",
             "type": "array"
@@ -163,6 +163,16 @@
       "DownloadRequest": {
         "additionalProperties": false,
         "properties": {
+          "custom_template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Template-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "document": {
             "$ref": "#/components/schemas/DocumentContent-Input"
           },
@@ -482,7 +492,201 @@
         "title": "SuggestRequest",
         "type": "object"
       },
-      "Template": {
+      "Template-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "addressee_width_mm": {
+            "default": 80,
+            "maximum": 120.0,
+            "minimum": 50.0,
+            "title": "Addressee Width Mm",
+            "type": "number"
+          },
+          "body_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Body Alignment",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "first_line_indent_mm": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "First Line Indent Mm",
+            "type": "number"
+          },
+          "font": {
+            "title": "Font",
+            "type": "string"
+          },
+          "font_size": {
+            "maximum": 16.0,
+            "minimum": 10.0,
+            "title": "Font Size",
+            "type": "number"
+          },
+          "footer": {
+            "default": "none",
+            "enum": [
+              "none",
+              "page_number",
+              "title_and_date"
+            ],
+            "title": "Footer",
+            "type": "string"
+          },
+          "header": {
+            "default": "none",
+            "enum": [
+              "none",
+              "organization"
+            ],
+            "title": "Header",
+            "type": "string"
+          },
+          "header_footer_font_size": {
+            "default": 10,
+            "maximum": 14.0,
+            "minimum": 8.0,
+            "title": "Header Footer Font Size",
+            "type": "number"
+          },
+          "headline_alignment": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Headline Alignment",
+            "type": "string"
+          },
+          "headline_bold": {
+            "default": false,
+            "title": "Headline Bold",
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "letterhead_alignment": {
+            "default": "center",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Letterhead Alignment",
+            "type": "string"
+          },
+          "line_spacing": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Line Spacing",
+            "type": "number"
+          },
+          "margins_mm": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "top",
+                "right",
+                "bottom",
+                "left"
+              ]
+            },
+            "title": "Margins Mm",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paragraph_space_after_pt": {
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Paragraph Space After Pt",
+            "type": "number"
+          },
+          "recipient_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Recipient Alignment",
+            "type": "string"
+          },
+          "recipient_layout": {
+            "default": "block",
+            "enum": [
+              "block",
+              "table"
+            ],
+            "title": "Recipient Layout",
+            "type": "string"
+          },
+          "signature_alignment": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Signature Alignment",
+            "type": "string"
+          },
+          "small_font_size": {
+            "default": 10,
+            "maximum": 14.0,
+            "minimum": 8.0,
+            "title": "Small Font Size",
+            "type": "number"
+          },
+          "title_alignment": {
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ],
+            "title": "Title Alignment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "font",
+          "font_size",
+          "margins_mm",
+          "line_spacing",
+          "paragraph_space_after_pt",
+          "first_line_indent_mm",
+          "title_alignment",
+          "recipient_alignment",
+          "body_alignment"
+        ],
+        "title": "Template",
+        "type": "object"
+      },
+      "Template-Output": {
         "additionalProperties": false,
         "properties": {
           "addressee_width_mm": {

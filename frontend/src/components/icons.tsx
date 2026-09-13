@@ -20,6 +20,10 @@ export const Check = (props: IconProps) => <Svg {...props}>
   <path d="M5 12.5l4.5 4.5L19 7" />
 </Svg>;
 
+export const Close = (props: IconProps) => <Svg {...props}>
+  <path d="M6 6l12 12M18 6L6 18" />
+</Svg>;
+
 export const Download = (props: IconProps) => <Svg {...props}>
   <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" />
 </Svg>;

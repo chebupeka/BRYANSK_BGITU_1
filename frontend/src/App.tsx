@@ -17,7 +17,9 @@ import { useElapsedSeconds, useHotkeys } from './lib/hooks';
 import { arrangeBlocks, splitParagraphs } from './lib/layout';
 import { DEMO_REQUISITES, SAMPLES, sampleFor } from './lib/samples';
 import { useRouter, type Route } from './router';
-import { loadDraft, loadTheme, saveDraft, saveTheme } from './storage';
+import {
+  loadCustomTemplates, loadDraft, loadTheme, saveCustomTemplates, saveDraft, saveTheme,
+} from './storage';
 import type {
   ApiFailure, Catalog, DocumentContent, ProcessResult, ServiceStatus, ThemeName,
 } from './types';
@@ -75,14 +77,17 @@ export default function App() {
       if (!next.doc_types.length || !next.templates.length) {
         throw new Error('Каталог документов пока пуст. Проверьте конфигурации backend.');
       }
-      setCatalog(next);
+      const remoteIds = new Set(next.templates.map(item => item.id));
+      const customTemplates = loadCustomTemplates().filter(item => !remoteIds.has(item.id));
+      const fullCatalog = { ...next, templates: [...next.templates, ...customTemplates] };
+      setCatalog(fullCatalog);
       void getStatus().then(setStatus);
       setState(previous => ({
         ...previous,
         docType: next.doc_types.some(type => type.id === previous.docType)
           ? previous.docType : next.doc_types[0].id,
-        templateId: next.templates.some(item => item.id === previous.templateId)
-          ? previous.templateId : next.templates[0].id,
+        templateId: fullCatalog.templates.some(item => item.id === previous.templateId)
+          ? previous.templateId : fullCatalog.templates[0].id,
       }));
     } catch (error) {
       setCatalogFailure(asFailure(error));
@@ -234,12 +239,12 @@ export default function App() {
   }
 
   async function download() {
-    if (!result || busy) return;
+    if (!result || !template || busy) return;
     setBusy('download');
     setFailure(null);
     setDownloadedName('');
     try {
-      setDownloadedName(await downloadDocument(result.document, state.templateId));
+      setDownloadedName(await downloadDocument(result.document, template));
     } catch (error) {
       setFailure(asFailure(error));
     } finally {
@@ -355,6 +360,20 @@ export default function App() {
             setResult(null);
           }}
           onTemplate={templateId => setState(previous => ({ ...previous, templateId }))}
+          onCreateTemplate={created => {
+            setCatalog(previous => {
+              if (!previous) return previous;
+              const custom = [
+                ...previous.templates.filter(item => item.id.startsWith('custom_')),
+                created,
+              ];
+              saveCustomTemplates(custom);
+              return { ...previous, templates: [...previous.templates, created] };
+            });
+            setState(previous => ({ ...previous, templateId: created.id }));
+            setResult(null);
+            setToast({ message: `Оформление «${created.name}» сохранено.`, tone: 'success' });
+          }}
           onStart={() => navigate('/draft')} />
         : <div className="view view-empty">{notices}
           {loading && <div className="loading-block"><Spinner label="Загрузка каталога…" /></div>}

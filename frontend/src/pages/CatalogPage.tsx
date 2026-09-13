@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import PagePreview from '../components/PagePreview';
+import TemplateEditor from '../components/TemplateEditor';
 import { Button } from '../components/ui';
-import { ArrowRight, Check } from '../components/icons';
+import { ArrowRight, Check, Sparkle } from '../components/icons';
 import { resolveTemplate } from '../lib/layout';
 import { useReveal } from '../lib/hooks';
 import type { Catalog, DocumentContent, Template } from '../types';
@@ -13,6 +15,7 @@ interface Props {
   sample: (docTypeId: string) => DocumentContent;
   onPick: (docTypeId: string) => void;
   onTemplate: (templateId: string) => void;
+  onCreateTemplate: (template: Template) => void;
   onStart: () => void;
 }
 
@@ -29,6 +32,11 @@ function templateFacts(template: Template): string[] {
 
 export default function CatalogPage(props: Props) {
   const reveal = useReveal<HTMLElement>();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const selectedTemplate = props.catalog.templates.find(item => item.id === props.templateId)
+    ?? props.catalog.templates[0];
+  const selectedType = props.catalog.doc_types.find(item => item.id === props.docTypeId)
+    ?? props.catalog.doc_types[0];
 
   return <div className="view view-catalog">
     <header className="view-head">
@@ -38,16 +46,18 @@ export default function CatalogPage(props: Props) {
     </header>
 
     <section className="catalog-section">
-      <h2 className="group-title">Типы документов</h2>
+      <div className="group-title-row catalog-title-row">
+        <h2 className="group-title">Типы документов</h2>
+        <Button variant="secondary" icon={<Sparkle size={17} />}
+          onClick={() => setEditorOpen(true)}>Создать оформление</Button>
+      </div>
       <div className="catalog-grid">
         {props.catalog.doc_types.map(type => {
           const selected = type.id === props.docTypeId;
-          const template = props.catalog.templates.find(item => item.id === props.templateId)
-            ?? props.catalog.templates[0];
           return <article key={type.id} className={`catalog-card ${selected ? 'is-selected' : ''}`}>
             <div className="catalog-thumb" aria-hidden="true">
               <PagePreview content={props.sample(type.id)} docType={type}
-                template={template} width={176} />
+                template={selectedTemplate} width={176} />
             </div>
             <div className="catalog-text">
               <h3>{type.name} {selected && <span className="catalog-mark"><Check size={14} /></span>}</h3>
@@ -73,12 +83,10 @@ export default function CatalogPage(props: Props) {
       <div className="template-gallery">
         {props.catalog.templates.map(template => {
           const selected = template.id === props.templateId;
-          const type = props.catalog.doc_types.find(item => item.id === props.docTypeId)
-            ?? props.catalog.doc_types[0];
           return <article key={template.id}
             className={`gallery-card ${selected ? 'is-selected' : ''}`}>
             <div className="gallery-thumb" aria-hidden="true">
-              <PagePreview content={props.sample(type.id)} docType={type}
+              <PagePreview content={props.sample(selectedType.id)} docType={selectedType}
                 template={template} width={248} />
             </div>
             <div className="gallery-text">
@@ -96,5 +104,13 @@ export default function CatalogPage(props: Props) {
         })}
       </div>
     </section>
+
+    {editorOpen && <TemplateEditor baseTemplate={selectedTemplate}
+      content={props.sample(selectedType.id)} docType={selectedType}
+      onClose={() => setEditorOpen(false)}
+      onSave={template => {
+        props.onCreateTemplate(template);
+        setEditorOpen(false);
+      }} />}
   </div>;
 }
