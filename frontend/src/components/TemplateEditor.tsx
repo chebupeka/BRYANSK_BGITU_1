@@ -69,6 +69,19 @@ export default function TemplateEditor({
   const [previewTypeId, setPreviewTypeId] = useState(initialDocTypeId);
   const nameRef = useRef<HTMLInputElement>(null);
   const previewType = docTypes.find(item => item.id === previewTypeId) ?? docTypes[0];
+  const activePlacements = new Set(previewType.fields
+    .filter(field => previewType.blocks.includes(field.id))
+    .map(field => field.placement ?? 'labeled'));
+  const hasTitle = previewType.show_title !== false && previewType.blocks.includes('title');
+  const hasSalutation = activePlacements.has('salutation');
+  const hasHeadline = activePlacements.has('headline');
+  const hasAddressee = activePlacements.has('addressee');
+  const hasSignature = activePlacements.has('signature');
+  const hasLetterhead = activePlacements.has('letterhead');
+  const hasExecutor = activePlacements.has('executor');
+  const hasRunningContent = (hasLetterhead && template.header === 'organization')
+    || template.footer !== 'none';
+  const hasLetterheadAlignment = hasLetterhead || template.footer === 'title_and_date';
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -201,12 +214,12 @@ export default function TemplateEditor({
                   value={template.paragraph_space_after_pt}
                   onChange={event => patch({ paragraph_space_after_pt: numberFrom(event, template.paragraph_space_after_pt) })} />
               </Field>
-              <Field id="template-small-size" label="Мелкий текст, пт"
+              {hasExecutor && <Field id="template-small-size" label="Мелкий текст, пт"
                 hint="Исполнитель и служебные строки">
                 <input id="template-small-size" className="input" type="number" min="8" max="14" step="0.5"
                   value={template.small_font_size}
                   onChange={event => patch({ small_font_size: numberFrom(event, template.small_font_size) })} />
-              </Field>
+              </Field>}
             </div>
             <div className="editor-alignment">
               <span className="field-label">Выравнивание основного текста</span>
@@ -228,30 +241,30 @@ export default function TemplateEditor({
             </div>
           </fieldset>
 
-          <fieldset className="editor-group">
+          {(hasTitle || hasSalutation || hasHeadline) && <fieldset className="editor-group">
             <legend>Заголовки</legend>
             <div className="editor-alignment-grid">
-              <div className="editor-alignment">
+              {(hasTitle || hasSalutation) && <div className="editor-alignment">
                 <span className="field-label">Название документа</span>
                 <Segmented label="Выравнивание названия документа" value={template.title_alignment}
                   options={ALIGNMENTS} onChange={value => patch({ title_alignment: value })} />
-              </div>
-              <div className="editor-alignment">
+              </div>}
+              {hasHeadline && <div className="editor-alignment">
                 <span className="field-label">Тема документа</span>
                 <Segmented label="Выравнивание темы документа" value={template.headline_alignment}
                   options={ALIGNMENTS} onChange={value => patch({ headline_alignment: value })} />
-              </div>
+              </div>}
             </div>
-            <label className="editor-check">
+            {hasHeadline && <label className="editor-check">
               <input type="checkbox" checked={template.headline_bold}
                 onChange={event => patch({ headline_bold: event.target.checked })} />
               <span><strong>Выделять тему полужирным</strong><small>Применяется к теме перед основным текстом.</small></span>
-            </label>
-          </fieldset>
+            </label>}
+          </fieldset>}
 
-          <fieldset className="editor-group">
+          {(hasAddressee || hasSignature) && <fieldset className="editor-group">
             <legend>Адресат и подпись</legend>
-            <div className="editor-fields editor-fields-three">
+            {hasAddressee && <div className="editor-fields">
               <Field id="template-recipient-layout" label="Вид адресата">
                 <select id="template-recipient-layout" className="input" value={template.recipient_layout}
                   onChange={event => patch({ recipient_layout: event.target.value as Template['recipient_layout'] })}>
@@ -259,38 +272,37 @@ export default function TemplateEditor({
                   <option value="table">Таблица</option>
                 </select>
               </Field>
-              <Field id="template-addressee-width" label="Ширина адресата, мм"
+              {template.recipient_layout === 'block' && <Field id="template-addressee-width" label="Ширина адресата, мм"
                 hint="Для правого текстового блока">
                 <input id="template-addressee-width" className="input" type="number" min="50" max="120" step="1"
                   value={template.addressee_width_mm}
-                  disabled={template.recipient_layout === 'table'}
                   onChange={event => patch({ addressee_width_mm: numberFrom(event, template.addressee_width_mm) })} />
-              </Field>
-            </div>
+              </Field>}
+            </div>}
             <div className="editor-alignment-grid">
-              <div className="editor-alignment">
+              {hasAddressee && template.recipient_layout === 'block' && <div className="editor-alignment">
                 <span className="field-label">Выравнивание адресата</span>
                 <Segmented label="Выравнивание адресата" value={template.recipient_alignment}
                   options={ALIGNMENTS} onChange={value => patch({ recipient_alignment: value })} />
-              </div>
-              <div className="editor-alignment">
+              </div>}
+              {hasSignature && <div className="editor-alignment">
                 <span className="field-label">Выравнивание подписи</span>
                 <Segmented label="Выравнивание подписи" value={template.signature_alignment}
                   options={ALIGNMENTS} onChange={value => patch({ signature_alignment: value })} />
-              </div>
+              </div>}
             </div>
-          </fieldset>
+          </fieldset>}
 
           <fieldset className="editor-group">
             <legend>Колонтитулы и организация</legend>
             <div className="editor-fields editor-fields-three">
-              <Field id="template-header" label="Организация">
+              {hasLetterhead && <Field id="template-header" label="Организация">
                 <select id="template-header" className="input" value={template.header}
                   onChange={event => patch({ header: event.target.value as Template['header'] })}>
                   <option value="none">В тексте страницы</option>
                   <option value="organization">В верхнем колонтитуле</option>
                 </select>
-              </Field>
+              </Field>}
               <Field id="template-footer" label="Нижний колонтитул">
                 <select id="template-footer" className="input" value={template.footer}
                   onChange={event => patch({ footer: event.target.value as Template['footer'] })}>
@@ -299,18 +311,20 @@ export default function TemplateEditor({
                   <option value="title_and_date">Тип документа и дата</option>
                 </select>
               </Field>
-              <Field id="template-running-size" label="Размер колонтитула, пт">
+              {hasRunningContent && <Field id="template-running-size" label="Размер колонтитула, пт">
                 <input id="template-running-size" className="input" type="number" min="8" max="14" step="0.5"
                   value={template.header_footer_font_size}
                   onChange={event => patch({ header_footer_font_size: numberFrom(event, template.header_footer_font_size) })} />
-              </Field>
+              </Field>}
             </div>
-            <div className="editor-alignment">
-              <span className="field-label">Выравнивание организации и подписи колонтитула</span>
-              <Segmented label="Выравнивание организации и подписи колонтитула"
+            {hasLetterheadAlignment && <div className="editor-alignment">
+              <span className="field-label">{template.footer === 'title_and_date'
+                ? 'Выравнивание организации и нижнего колонтитула'
+                : 'Выравнивание организации'}</span>
+              <Segmented label="Выравнивание организации и нижнего колонтитула"
                 value={template.letterhead_alignment} options={ALIGNMENTS}
                 onChange={value => patch({ letterhead_alignment: value })} />
-            </div>
+            </div>}
           </fieldset>
 
           <footer className="template-editor-actions">
