@@ -201,6 +201,10 @@ def create_app(
         template = templates().get(request.template_id)
         if template is None:
             raise APIError(422, "unknown_template", "Неизвестный шаблон оформления.")
+        if request.formatting is not None:
+            # The base template still owns structural choices (headers, tables and margins),
+            # while the editor may safely override presentation of the main text.
+            template = template.model_copy(update=request.formatting.model_dump())
         content = renderer(request.document, doc_type, template)
         filename = f"{doc_type.id}-{template.id}.docx"
         return Response(

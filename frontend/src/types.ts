@@ -3,7 +3,7 @@
 // принадлежит самому интерфейсу.
 
 export type {
-  Catalog, DocumentContent, DocumentType, RequisiteField, Template,
+  Catalog, DocumentContent, DocumentFormatting, DocumentType, RequisiteField, Template,
   ProcessRequest, ProcessResult, DownloadRequest,
   SuggestRequest, RequisiteSuggestions,
   ErrorResponse, ErrorInfo, ErrorIssue,

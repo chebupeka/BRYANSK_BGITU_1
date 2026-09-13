@@ -159,6 +159,10 @@ class Writer:
             for text in self.content.body:
                 paragraph = self.paragraph(text, template.body_alignment)
                 paragraph.paragraph_format.first_line_indent = Mm(template.first_line_indent_mm)
+                for run in paragraph.runs:
+                    run.bold = template.body_bold
+                    run.italic = template.body_italic
+                    run.underline = template.body_underline
                 paragraphs.append(paragraph)
             return paragraphs
         if block.kind == "letterhead":

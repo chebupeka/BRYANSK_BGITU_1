@@ -9,6 +9,7 @@ Identifier = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,49}$")
 ShortText = Annotated[str, StringConstraints(max_length=MAX_REQUISITE_LENGTH)]
 Paragraph = Annotated[str, StringConstraints(min_length=1, max_length=20000)]
 Alignment = Literal["left", "center", "right", "justify"]
+EditorFont = Literal["Times New Roman", "Arial", "Calibri", "Georgia", "Courier New"]
 # Where a requisite goes in the DOCX. Neighbouring fields with the same placement form one block.
 Placement = Literal[
     "labeled",  # «Подпись поля: значение» — for requisites without a standard position
@@ -83,8 +84,26 @@ class Template(Contract):
     letterhead_alignment: Alignment = "center"
     headline_alignment: Alignment = "left"
     headline_bold: bool = False
+    # Optional editor overrides for the main body. Catalog YAML files rely on these defaults.
+    body_bold: bool = False
+    body_italic: bool = False
+    body_underline: bool = False
     addressee_width_mm: float = Field(default=80, ge=50, le=120)
     small_font_size: float = Field(default=10, ge=8, le=14)
+
+
+class DocumentFormatting(Contract):
+    """Validated Word-like overrides applied to the prepared document on download."""
+
+    font: EditorFont
+    font_size: float = Field(ge=10, le=20)
+    line_spacing: float = Field(ge=1, le=2)
+    paragraph_space_after_pt: float = Field(ge=0, le=24)
+    first_line_indent_mm: float = Field(ge=0, le=20)
+    body_alignment: Alignment
+    body_bold: bool
+    body_italic: bool
+    body_underline: bool
 
 
 class Catalog(Contract):
@@ -153,6 +172,7 @@ class ProcessResponse(Contract):
 class DownloadRequest(Contract):
     document: DocumentContent
     template_id: Identifier
+    formatting: DocumentFormatting | None = None
 
 
 class HealthResponse(Contract):

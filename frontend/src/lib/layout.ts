@@ -1,4 +1,6 @@
-import type { Alignment, DocumentContent, DocumentType, Placement, RequisiteField, Template } from '../types';
+import type {
+  Alignment, DocumentContent, DocumentFormatting, DocumentType, Placement, RequisiteField, Template,
+} from '../types';
 
 // The live preview mirrors backend/app/docx_generator.py: the same block order, the same
 // skipping of empty optional requisites, the same «Заполнить» labels. Everything the DOCX
@@ -31,6 +33,9 @@ export interface ResolvedTemplate {
   letterheadAlignment: Alignment;
   headlineAlignment: Alignment;
   headlineBold: boolean;
+  bodyBold: boolean;
+  bodyItalic: boolean;
+  bodyUnderline: boolean;
   addresseeWidthMm: number;
   smallFontSize: number;
   textWidthMm: number;
@@ -66,9 +71,32 @@ export function resolveTemplate(template: Template): ResolvedTemplate {
     letterheadAlignment: template.letterhead_alignment ?? 'center',
     headlineAlignment: template.headline_alignment ?? 'left',
     headlineBold: template.headline_bold ?? false,
+    bodyBold: template.body_bold ?? false,
+    bodyItalic: template.body_italic ?? false,
+    bodyUnderline: template.body_underline ?? false,
     addresseeWidthMm: template.addressee_width_mm ?? 80,
     smallFontSize: template.small_font_size ?? Math.max(8, fontSize - 4),
     textWidthMm: PAGE_WIDTH_MM - margins.left - margins.right,
+  };
+}
+
+export const EDITOR_FONTS: DocumentFormatting['font'][] = [
+  'Times New Roman', 'Arial', 'Calibri', 'Georgia', 'Courier New',
+];
+
+/** Word-like controls start with the selected catalog template's current values. */
+export function formattingForTemplate(template: Template): DocumentFormatting {
+  return {
+    font: EDITOR_FONTS.includes(template.font as DocumentFormatting['font'])
+      ? template.font as DocumentFormatting['font'] : 'Arial',
+    font_size: template.font_size,
+    line_spacing: template.line_spacing ?? 1.5,
+    paragraph_space_after_pt: template.paragraph_space_after_pt ?? 0,
+    first_line_indent_mm: template.first_line_indent_mm ?? 0,
+    body_alignment: template.body_alignment ?? 'justify',
+    body_bold: template.body_bold ?? false,
+    body_italic: template.body_italic ?? false,
+    body_underline: template.body_underline ?? false,
   };
 }
 

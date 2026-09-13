@@ -3,6 +3,7 @@ from zipfile import ZipFile
 
 import pytest
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Mm
 from fastapi.testclient import TestClient
@@ -46,10 +47,11 @@ def prepared(client, type_id="service_memo", requisites=None, draft=DRAFT):
     return response.json()
 
 
-def download(client, document, template_id="classic"):
-    response = client.post("/api/documents/download", json={
-        "document": document, "template_id": template_id,
-    })
+def download(client, document, template_id="classic", formatting=None):
+    payload = {"document": document, "template_id": template_id}
+    if formatting is not None:
+        payload["formatting"] = formatting
+    response = client.post("/api/documents/download", json=payload)
     assert response.status_code == 200, response.text
     assert response.headers["content-disposition"].endswith('.docx"')
     assert "wordprocessingml.document" in response.headers["content-type"]
@@ -147,6 +149,33 @@ def test_switching_template_changes_formatting_only(client):
     assert modern.styles["Normal"].font.size.pt == 12
     assert abs(classic.sections[0].left_margin - Mm(30)) < Mm(0.1)
     assert abs(modern.sections[0].top_margin - Mm(15)) < Mm(0.1)
+
+
+def test_editor_formatting_reaches_the_downloaded_docx(client):
+    result = prepared(client, requisites=filled("service_memo"))
+    formatting = {
+        "font": "Georgia",
+        "font_size": 16,
+        "line_spacing": 2,
+        "paragraph_space_after_pt": 12,
+        "first_line_indent_mm": 15,
+        "body_alignment": "center",
+        "body_bold": True,
+        "body_italic": True,
+        "body_underline": True,
+    }
+    rendered = Document(BytesIO(download(
+        client, result["document"], "classic", formatting,
+    ).content))
+    body = [paragraph for paragraph in rendered.paragraphs if paragraph.text in DRAFT.splitlines()]
+
+    assert rendered.styles["Normal"].font.name == "Georgia"
+    assert rendered.styles["Normal"].font.size.pt == 16
+    assert rendered.styles["Normal"].paragraph_format.line_spacing == 2
+    assert rendered.styles["Normal"].paragraph_format.space_after.pt == 12
+    assert all(paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER for paragraph in body)
+    assert all(abs(paragraph.paragraph_format.first_line_indent - Mm(15)) < Mm(0.1) for paragraph in body)
+    assert all(run.bold and run.italic and run.underline for paragraph in body for run in paragraph.runs)
 
 
 @pytest.mark.parametrize("template_id", list(templates()))
@@ -277,6 +306,12 @@ def test_download_validates_content_and_template(client):
         {"document": document | {"body": []}, "template_id": "classic"},
         {"document": document | {"body": ["bad\x00"]}, "template_id": "classic"},
         {"document": document | {"requisites": {"unknown": "x"}}, "template_id": "classic"},
+        {"document": document, "template_id": "classic", "formatting": {
+            "font": "Comic Sans MS", "font_size": 40, "line_spacing": 3,
+            "paragraph_space_after_pt": 0, "first_line_indent_mm": 0,
+            "body_alignment": "diagonal", "body_bold": False,
+            "body_italic": False, "body_underline": False,
+        }},
     ]:
         assert client.post("/api/documents/download", json=payload).status_code == 422
 

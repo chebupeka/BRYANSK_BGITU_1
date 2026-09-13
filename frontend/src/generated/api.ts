@@ -19,6 +19,18 @@ export type DocumentContent = {
   "body": Array<string>;
 };
 
+export type DocumentFormatting = {
+  "font": "Times New Roman" | "Arial" | "Calibri" | "Georgia" | "Courier New";
+  "font_size": number;
+  "line_spacing": number;
+  "paragraph_space_after_pt": number;
+  "first_line_indent_mm": number;
+  "body_alignment": "left" | "center" | "right" | "justify";
+  "body_bold": boolean;
+  "body_italic": boolean;
+  "body_underline": boolean;
+};
+
 export type DocumentType = {
   "id": string;
   "name": string;
@@ -32,6 +44,7 @@ export type DocumentType = {
 export type DownloadRequest = {
   "document": DocumentContentInput;
   "template_id": string;
+  "formatting"?: DocumentFormatting | null;
 };
 
 export type ErrorInfo = {
@@ -117,6 +130,9 @@ export type Template = {
   "letterhead_alignment": "left" | "center" | "right" | "justify";
   "headline_alignment": "left" | "center" | "right" | "justify";
   "headline_bold": boolean;
+  "body_bold": boolean;
+  "body_italic": boolean;
+  "body_underline": boolean;
   "addressee_width_mm": number;
   "small_font_size": number;
 };
