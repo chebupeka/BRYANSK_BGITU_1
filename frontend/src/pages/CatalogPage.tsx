@@ -68,7 +68,10 @@ export default function CatalogPage(props: Props) {
               </ul>
               <Button variant={selected ? 'primary' : 'secondary'}
                 iconRight={<ArrowRight size={16} />}
-                onClick={() => { props.onPick(type.id); props.onStart(); }}>
+                onClick={() => {
+                  if (selected) props.onStart();
+                  else props.onPick(type.id);
+                }}>
                 {selected ? 'Продолжить' : 'Выбрать тип'}
               </Button>
             </div>
@@ -105,8 +108,8 @@ export default function CatalogPage(props: Props) {
       </div>
     </section>
 
-    {editorOpen && <TemplateEditor baseTemplate={selectedTemplate}
-      content={props.sample(selectedType.id)} docType={selectedType}
+    {editorOpen && <TemplateEditor docTypes={props.catalog.doc_types}
+      initialDocTypeId={selectedType.id} sample={props.sample}
       onClose={() => setEditorOpen(false)}
       onSave={template => {
         props.onCreateTemplate(template);
