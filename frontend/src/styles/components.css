@@ -837,9 +837,32 @@
 .editor-fields-wide { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; }
 .editor-fields-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .editor-margins { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.editor-alignment { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 16px; }
-.editor-alignment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.editor-alignment .segmented { max-width: 100%; flex-wrap: wrap; }
+.editor-alignment {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 16px;
+}
+.editor-alignment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr));
+  gap: 14px;
+}
+.editor-alignment .segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+}
+.editor-alignment .segmented-item {
+  min-width: 0;
+  padding-inline: 8px;
+  line-height: 1.25;
+  white-space: normal;
+}
 .editor-check { display: flex; align-items: flex-start; gap: 11px; margin-top: 16px; cursor: pointer; }
 .editor-check input { margin-top: 4px; accent-color: var(--accent); }
 .editor-check span { display: flex; flex-direction: column; gap: 2px; }
