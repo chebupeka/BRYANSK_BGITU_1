@@ -180,6 +180,77 @@ def test_attachment_line_keeps_only_its_description():
     assert found["attachment"] == "на 2 листах", "слово «Приложение» добавит генератор"
 
 
+@pytest.mark.parametrize(
+    "separator", [": ", " — ", " - ", " "], ids=["colon", "em-dash", "dash", "none"],
+)
+@pytest.mark.parametrize(("label", "value", "field_id", "expected"), [
+    ("Дата", "12.03.2025", "date", "12.03.2025"),
+    ("Номер", "47-СЗ", "number", "47-СЗ"),
+    ("Заголовок", "О закупке офисной техники", "subject", "О закупке офисной техники"),
+    ("Тема", "Об оплате поставки", "subject", "Об оплате поставки"),
+    ("Подпись", "Петров.", "signer", "Петров"),
+    ("Подписант", "Петров П.П.", "signer", "Петров П.П."),
+])
+def test_each_way_of_writing_a_label_gives_the_requisite(
+    separator, label, value, field_id, expected,
+):
+    line = f"{label}{separator}{value}"
+    draft = f"{line}\nПрошу согласовать закупку."
+    doc_type = document_types()["service_memo"]
+
+    assert suggest_requisites(draft, doc_type) == {field_id: expected}
+    assert body_lines(draft.splitlines(), doc_type) == ["Прошу согласовать закупку."]
+
+
+@pytest.mark.parametrize(("line", "found"), [
+    ("Дата 11 сентября 2026 года", {"date": "11 сентября 2026"}),
+    ("Номер № 12-45 от 11.09.2026", {"number": "12-45", "date": "11.09.2026"}),
+    ("Подписант П. П. Петров", {"signer": "П. П. Петров"}),
+    ("ПОДПИСЬ Николаева Н.Н.", {"signer": "Николаева Н.Н."}),
+    ("Тема Про ремонт кабинета 204", {"subject": "Про ремонт кабинета 204"}),
+])
+def test_unseparated_label_accepts_usual_forms_of_the_value(line, found):
+    assert suggest(line + "\nПрошу согласовать закупку.") == found
+
+
+def test_unseparated_outgoing_number_of_a_letter():
+    draft = "Исходящий номер 88-П\nПрошу прислать коммерческое предложение."
+    assert suggest(draft, "letter") == {"number": "88-П"}
+
+
+@pytest.mark.parametrize("line", [
+    "От этого зависит срок поставки",
+    "Дата поставки пока не известна",
+    "Тема встречи обсуждалась вчера",
+    "Номер телефона не указан",
+    "Кому-то придётся задержаться",
+    "Подпись поставят позже",
+    "Номер 2 в очереди — отдел продаж",
+    "Дата поставки 25.09.2026",
+    "Номер телефона 8-900-000-00-00",
+    "Номер 12 45",
+    "Тема о закупке обсуждалась вчера",
+    "Тема О закупке обсуждалась вчера. Решения нет",
+    "Заголовок статьи уже придумали",
+    "Подпись Отсутствует",
+    "Подпись директора обязательна",
+    "Подписант Петров поставит подпись завтра",
+])
+def test_prose_starting_with_a_label_word_is_not_a_requisite(line):
+    draft = f"{line}\nПрошу согласовать закупку."
+    doc_type = document_types()["service_memo"]
+
+    assert suggest_requisites(draft, doc_type) == {}
+    assert body_lines(draft.splitlines(), doc_type) == draft.splitlines(), (
+        "строка без извлечённого реквизита остаётся в тексте"
+    )
+
+
+def test_label_word_at_the_end_of_a_paragraph_is_not_a_requisite():
+    draft = "Нам надо купить три компьютера до 25.09.2026. Подпись Петров."
+    assert suggest(draft) == {}
+
+
 def test_unlabelled_fields_are_not_guessed_from_prose():
     draft = "Директор колледжа Иванов И. И. просит лаборанта Петрову А. А. закупить мониторы."
     assert suggest(draft) == {}, "адресата и подписанта из текста не выводим"

@@ -20,6 +20,38 @@ DATE_ONLY_LINE = re.compile(
 )
 ATTACHMENT_LINE = re.compile(r"^[\s>*•·-]*приложени[ея]\s+(\S.*?)\s*$", re.IGNORECASE)
 INITIAL_AT_END = re.compile(r"\b[А-ЯЁA-Z]\.$")
+
+# Метка без разделителя: «Дата 12.03.2025», «Номер 47-СЗ». В обычной фразе те же слова
+# встречаются постоянно («Дата поставки пока не известна»), поэтому такая строка
+# принимается только для нескольких меток и только когда значение имеет строгую форму.
+UNSEPARATED_LINE = re.compile(
+    r"^[\s>*•·-]*(исходящий\s+номер|номер|дата|подписант|подпись|заголовок|тема)\s+(\S.*?)\s*$",
+    re.IGNORECASE,
+)
+UNSEPARATED_LABELS = {
+    "исходящий номер": "number",
+    "номер": "number",
+    "дата": "date",
+    "подписант": "signer",
+    "подпись": "signer",
+    "заголовок": "subject",
+    "тема": "subject",
+}
+# Номер — одно слово с цифрой, без пробелов внутри; «от 11.09.2026» разберёт split_number_and_date.
+NUMBER_VALUE = re.compile(rf"№?\s*[\w./-]*\d[\w./-]*(?:\s+от\s+(?:{DATE.pattern}))?", re.IGNORECASE)
+# «12 марта 2025 года» — в значение идёт только сама дата, как у даты отдельной строкой.
+DATE_VALUE = re.compile(rf"({DATE.pattern})(?:\s*(?:г\.?|года))?", re.IGNORECASE)
+# Фамилия с инициалами до или после. Без инициалов слово с заглавной буквы может быть
+# чем угодно («Подпись Отсутствует»), поэтому одна фамилия берётся только с типичным окончанием.
+INITIALS = r"[А-ЯЁ]\.\s?(?:[А-ЯЁ]\.)?"
+SURNAME = r"[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?"
+SIGNER_VALUE = re.compile(rf"(?:{INITIALS}\s*{SURNAME}|{SURNAME}\s+{INITIALS})\.?")
+BARE_SURNAME_VALUE = re.compile(
+    r"[А-ЯЁ][а-яё]*(?:ов|ев|ёв|ин|ын|ова|ева|ёва|ина|ына|ский|цкий|ская|цкая|енко|ук|юк|ич)\.?"
+)
+# Тема — короткий заголовок «О чём-то» с заглавной буквы и без знаков конца фразы внутри:
+# «Тема встречи обсуждалась вчера» и «тема о закупке обсуждалась» так не пишут.
+SUBJECT_VALUE = re.compile(r"(?:О|Об|Обо|Про)\s[^.!?;:]{2,100}\.?")
 FIELD_KEYWORDS: dict[str, tuple[str, ...]] = {
     "recipient": ("кому", "адресат", "получатель", "кому направляется"),
     "sender": ("от кого", "от", "отправитель", "автор", "заявитель"),
@@ -56,7 +88,11 @@ def scan(lines: list[str], doc_type: DocumentType):
     labels = field_labels(doc_type)
     fields = {field.id for field in doc_type.fields}
     for index, line in enumerate(lines):
-        found = labelled_value(line, labels) or usual_value(line, fields)
+        found = (
+            labelled_value(line, labels)
+            or unseparated_value(line, fields)
+            or usual_value(line, fields)
+        )
         if not found:
             continue
         for field_id, value in split_number_and_date(*found, fields):
@@ -82,6 +118,32 @@ def labelled_value(line: str, labels: dict[str, str]) -> tuple[str, str] | None:
         return None
     field_id = labels.get(normalize(match.group(1)))
     return (field_id, clean_value(match.group(2))) if field_id else None
+
+
+def unseparated_value(line: str, fields: set[str]) -> tuple[str, str] | None:
+    """«Дата 12.03.2025»: метка без разделителя, значение строгой формы."""
+    match = UNSEPARATED_LINE.match(line)
+    if not match:
+        return None
+    field_id = UNSEPARATED_LABELS[normalize(match.group(1))]
+    value = match.group(2)
+    if field_id not in fields or not has_shape(field_id, value):
+        return None
+    if field_id == "number":
+        value = value.removeprefix("№").lstrip()
+    elif field_id == "date":
+        value = DATE_VALUE.fullmatch(value).group(1)
+    return field_id, clean_value(value)
+
+
+def has_shape(field_id: str, value: str) -> bool:
+    if field_id == "number":
+        return bool(NUMBER_VALUE.fullmatch(value))
+    if field_id == "date":
+        return bool(DATE_VALUE.fullmatch(value))
+    if field_id == "signer":
+        return bool(SIGNER_VALUE.fullmatch(value) or BARE_SURNAME_VALUE.fullmatch(value))
+    return bool(SUBJECT_VALUE.fullmatch(value))
 
 
 def usual_value(line: str, fields: set[str]) -> tuple[str, str] | None:
