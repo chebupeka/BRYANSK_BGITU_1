@@ -180,16 +180,24 @@ def test_attachment_line_keeps_only_its_description():
     assert found["attachment"] == "на 2 листах", "слово «Приложение» добавит генератор"
 
 
-@pytest.mark.parametrize(
-    "separator", [": ", " — ", " - ", " "], ids=["colon", "em-dash", "dash", "none"],
-)
-@pytest.mark.parametrize(("label", "value", "field_id", "expected"), [
+LABEL_CASES = [
     ("Дата", "12.03.2025", "date", "12.03.2025"),
     ("Номер", "47-СЗ", "number", "47-СЗ"),
     ("Заголовок", "О закупке офисной техники", "subject", "О закупке офисной техники"),
     ("Тема", "Об оплате поставки", "subject", "Об оплате поставки"),
     ("Подпись", "Петров.", "signer", "Петров"),
     ("Подписант", "Петров П.П.", "signer", "Петров П.П."),
+]
+SEPARATORS = {"colon": ": ", "em-dash": " — ", "dash": " - ", "none": " "}
+# Без разделителя берутся только поля со значением строгой формы. Тема и заголовок — нет.
+WITHOUT_SEPARATOR = {"date", "number", "signer"}
+
+
+@pytest.mark.parametrize(("separator", "label", "value", "field_id", "expected"), [
+    pytest.param(separator, *case, id=f"{case[2]}-{case[0]}-{name}")
+    for name, separator in SEPARATORS.items()
+    for case in LABEL_CASES
+    if separator.strip() or case[2] in WITHOUT_SEPARATOR
 ])
 def test_each_way_of_writing_a_label_gives_the_requisite(
     separator, label, value, field_id, expected,
@@ -220,8 +228,8 @@ def test_unseparated_outgoing_number_of_a_letter():
     assert suggest(draft, "letter") == {"number": "88-П"}
 
 
-def test_unseparated_subject_is_taken_from_the_header_block():
-    """Шапка письма: «От кого» у письма не поле, но строка шапки, а не текст."""
+def test_letter_header_without_separators_leaves_the_subject_in_the_text():
+    """Пример письма со стенда: дата, номер и подпись берутся, тема без разделителя — нет."""
     draft = (
         "Кому: генеральному директору ООО Василёк Фёдорову Ф.Ф.\n"
         "От кого: генеральный директор ООО Ромашка Иванов И.И.\n"
@@ -239,30 +247,57 @@ def test_unseparated_subject_is_taken_from_the_header_block():
         "recipient": "генеральному директору ООО Василёк Фёдорову Ф.Ф.",
         "date": "16.03.2025",
         "number": "88-П",
-        "subject": "О сотрудничестве в сфере поставок",
         "signer": "Иванов",
     }
     assert body_lines(draft.splitlines(), doc_type) == [
         "От кого: генеральный директор ООО Ромашка Иванов И.И.",
+        "Тема О сотрудничестве в сфере поставок",
         "Мы хотим заключить с вами договор на поставку мебели.",
     ]
 
 
-@pytest.mark.parametrize("draft", [
-    "Прошу согласовать закупку.\nТема О закупке офисной техники\n\nСрок — неделя.",
-    "Тема О закупке офисной техники\nПрошу согласовать закупку.",
-], ids=["after-text", "text-right-below"])
-def test_unseparated_subject_outside_the_header_is_left_in_the_text(draft):
-    assert suggest(draft) == {}
+SUBJECT_VALUES = [
+    "О закупке офисной техники",
+    "Об оплате поставки",
+    "Обо всём по порядку",
+    "Про ремонт кабинета 204",
+]
+# Шапка из одних реквизитов, строка после пустой, строка сразу перед текстом и после него.
+SUBJECT_PLACEMENTS = {
+    "header": "Кому: Директору\nДата: 12.03.2025\nНомер: 47-СЗ\n{line}\n\nПрошу согласовать.",
+    "only-line": "{line}",
+    "text-right-below": "{line}\nПрошу согласовать закупку.",
+    "after-text": "Прошу согласовать закупку.\n{line}\n\nСрок — неделя.",
+}
 
 
-def test_unseparated_heading_starts_with_o_or_ob():
-    """«Про» в заголовке делового документа не пишут: без разделителя это не тема."""
-    header = "Дата: 12.03.2025\n{}\n\nПрошу отремонтировать кабинет."
-    assert suggest(header.format("Тема Про ремонт кабинета 204")) == {"date": "12.03.2025"}
-    assert suggest(header.format("Тема: Про ремонт кабинета 204"))["subject"] == (
-        "Про ремонт кабинета 204"
-    )
+@pytest.mark.parametrize("placement", list(SUBJECT_PLACEMENTS))
+@pytest.mark.parametrize("type_id", ["service_memo", "report_memo", "information_note", "letter"])
+@pytest.mark.parametrize("value", SUBJECT_VALUES)
+@pytest.mark.parametrize("label", ["Тема", "Заголовок", "ТЕМА", "заголовок"])
+def test_subject_without_separator_is_not_taken_and_stays_in_the_text(
+    label, value, type_id, placement,
+):
+    """Тему без разделителя не отличить от фразы «Тема О закупке обсудим завтра»."""
+    line = f"{label} {value}"
+    draft = SUBJECT_PLACEMENTS[placement].format(line=line)
+    doc_type = document_types()[type_id]
+
+    assert "subject" not in suggest_requisites(draft, doc_type)
+    assert line in body_lines(draft.splitlines(), doc_type)
+
+
+@pytest.mark.parametrize("separator", [": ", " — ", " – ", " - "])
+@pytest.mark.parametrize("value", SUBJECT_VALUES)
+@pytest.mark.parametrize("label", ["Тема", "Заголовок"])
+def test_subject_with_a_separator_is_taken_in_any_place(label, value, separator):
+    for placement in ("header", "text-right-below", "after-text"):
+        line = f"{label}{separator}{value}"
+        draft = SUBJECT_PLACEMENTS[placement].format(line=line)
+        doc_type = document_types()["service_memo"]
+
+        assert suggest_requisites(draft, doc_type)["subject"] == value, placement
+        assert line not in body_lines(draft.splitlines(), doc_type), placement
 
 
 def test_bare_surname_needs_the_same_person_with_initials():
@@ -287,6 +322,16 @@ PROSE_LINES = [
     "Номер 1-й",
     "Номер 1-Й",
     "Номер 2.",
+    "Номер 1.",
+    "Номер 2",
+    "Номер 3-й в списке",
+    "Номер 2-го этажа",
+    "Номер 5-ГО",
+    "Номер первый",
+    "Тема О закупке офисной техники",
+    "Заголовок Об оплате поставки",
+    "Тема Обо всём по порядку",
+    "Заголовок Про ремонт кабинета 204",
     "Тема о закупке обсуждалась вчера",
     "Тема О закупке обсуждалась вчера. Решения нет",
     "Тема Об этом поговорим на планёрке",
@@ -302,6 +347,13 @@ PROSE_LINES = [
     "Подпись Один",
     "Подпись Женская",
     "Подпись Петрович",
+    "Подпись Петровна.",
+    "Подписант Иванович",
+    "Подпись Сергеевич Петров",
+    "Подпись Готова",
+    "Подпись Нужна.",
+    "Подпись Ниже",
+    "Подписант Новиков",
     "Подпись директора обязательна",
     "Подписант Петров поставит подпись завтра",
 ]
