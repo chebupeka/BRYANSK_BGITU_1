@@ -95,10 +95,20 @@ def main() -> int:
         type=Path,
         help="каталог, куда сохранить ответы /api/process в JSON (для разбора результата)",
     )
+    parser.add_argument(
+        "--only",
+        action="append",
+        metavar="ЧЕРНОВИК",
+        help="обработать только этот черновик (имя файла без .txt); можно указать несколько раз",
+    )
     arguments = parser.parse_args()
     base = arguments.base.rstrip("/")
 
     cases = read_manifest(DRAFTS / "manifest.yaml")
+    known = {Path(case["file"]).stem for case in cases}
+    unknown = sorted(set(arguments.only or []) - known)
+    if unknown:
+        raise SystemExit(f"В манифесте нет черновиков: {', '.join(unknown)}")
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if arguments.responses:
         arguments.responses.mkdir(parents=True, exist_ok=True)
@@ -109,6 +119,14 @@ def main() -> int:
         draft_path = DRAFTS / case["file"]
         name = draft_path.stem
         doc_type = case["doc_type"]
+        # Оформление modern получает первый черновик типа по манифесту, даже если
+        # обрабатываются не все черновики: иначе --only создал бы лишние .modern.docx.
+        templates = ["classic"]
+        if doc_type not in modern_done:
+            templates.append("modern")
+            modern_done.add(doc_type)
+        if arguments.only and name not in arguments.only:
+            continue
         draft = draft_path.read_text(encoding="utf-8")
         print(f"{name} ({doc_type})", flush=True)
 
@@ -130,10 +148,6 @@ def main() -> int:
                 json.dumps(processed, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
-        templates = ["classic"]
-        if doc_type not in modern_done:
-            templates.append("modern")
-            modern_done.add(doc_type)
         for template_id in templates:
             content, _ = call(
                 base,
