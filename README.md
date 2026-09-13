@@ -294,14 +294,20 @@ Times New Roman 14 пт, межстрочный интервал 1,5, поля 2
 | Первый шаг интерфейса | Пять черновиков в один клик: четыре типа документов и «Черновик с опечатками» |
 | [examples/drafts](examples/drafts) | 20 черновиков разного качества: по каждому типу структурированный, разговорный, неполный и «в одну строку», плюс краевые случаи — одна строка, опечатки и шум, смешанные алфавиты, разные форматы чисел |
 | [examples/drafts/manifest.yaml](examples/drafts/manifest.yaml) | Ожидаемый результат для каждого черновика: тип документа, какие реквизиты должны найтись, какие остаться пустыми, что обязано сохраниться в тексте |
+| [examples/generated](examples/generated) | 13 готовых DOCX по этим черновикам, снятых со стенда в режиме `llm`. В [README каталога](examples/generated/README.md) для каждого сказано, на что смотреть: какие реквизиты остались метками и какие обороты переписаны |
 | [examples/typos.txt](examples/typos.txt) | Черновик со сроком, суммой, фамилией и оговоркой — для сценария 4 |
 | [examples/reference/case_reference.yaml](examples/reference/case_reference.yaml) | Эталонный перечень реквизитов по типам документов |
 | [examples/api.http](examples/api.http), [service_memo.json](examples/service_memo.json), [missing_requisites.json](examples/missing_requisites.json) | Готовые запросы к API |
 
 Организации, люди, суммы и номера в примерах вымышлены. Любой `.txt` из `examples/drafts`
 перетаскивается прямо в поле черновика: три шага — и получается документ, соответствующий
-этому черновику. Автоматическая сверка тех же черновиков с ожиданиями из `manifest.yaml`
-описана в [docs/QA.md](docs/QA.md).
+этому черновику. Готовые пары «черновик → документ» лежат в
+[examples/generated](examples/generated): документы сняты тем же путём, что проходит
+пользователь, реквизиты вручную не дописывались. Восемь документов из 20 туда не вошли —
+в них модель изменила смысл или дописала сведения; что именно, перечислено там же.
+Перегенерировать их можно скриптом
+[scripts/generate_examples.py](scripts/generate_examples.py). Автоматическая сверка
+черновиков с ожиданиями из `manifest.yaml` описана в [docs/QA.md](docs/QA.md).
 
 ## Стек и структура проекта
 
@@ -368,9 +374,10 @@ frontend/
   nginx.conf            раздача сборки, прокси /api, ограничение частоты /api/process
 contracts/              openapi.json, api.ts, llm-output.schema.json (экспорт из backend)
 examples/               api.http, drafts/ (20 черновиков + manifest.yaml),
+                        generated/ (готовые DOCX по черновикам),
                         reference/case_reference.yaml, typos.txt, JSON-запросы к API
-scripts/                check_docker.py, check_llm.py, export_contracts.py, qa.py,
-                        qa_report.py, quality_report.py
+scripts/                check_docker.py, check_llm.py, export_contracts.py,
+                        generate_examples.py, qa.py, qa_report.py, quality_report.py
 docs/                   ARCHITECTURE.md, API.md, QA.md, DEPLOY.md, REMOTE_MODEL.md,
                         GIGACHAT.md, INTEGRATION.md, HANDOFF.md, presentation/
 ```
