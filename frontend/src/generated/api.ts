@@ -32,6 +32,7 @@ export type DocumentType = {
 export type DownloadRequest = {
   "document": DocumentContentInput;
   "template_id": string;
+  "custom_template"?: TemplateInput | null;
 };
 
 export type ErrorInfo = {
@@ -94,6 +95,31 @@ export type RequisiteSuggestions = {
 export type SuggestRequest = {
   "doc_type": string;
   "draft": string;
+};
+
+export type TemplateInput = {
+  "id": string;
+  "name": string;
+  "description": string;
+  "font": string;
+  "font_size": number;
+  "margins_mm": Record<string, number>;
+  "line_spacing": number;
+  "paragraph_space_after_pt": number;
+  "first_line_indent_mm": number;
+  "title_alignment": "left" | "center" | "right" | "justify";
+  "recipient_alignment": "left" | "center" | "right" | "justify";
+  "body_alignment": "left" | "center" | "right" | "justify";
+  "signature_alignment"?: "left" | "center" | "right" | "justify";
+  "recipient_layout"?: "block" | "table";
+  "header"?: "none" | "organization";
+  "footer"?: "none" | "page_number" | "title_and_date";
+  "header_footer_font_size"?: number;
+  "letterhead_alignment"?: "left" | "center" | "right" | "justify";
+  "headline_alignment"?: "left" | "center" | "right" | "justify";
+  "headline_bold"?: boolean;
+  "addressee_width_mm"?: number;
+  "small_font_size"?: number;
 };
 
 export type Template = {

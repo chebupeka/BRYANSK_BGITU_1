@@ -281,6 +281,38 @@ def test_download_validates_content_and_template(client):
         assert client.post("/api/documents/download", json=payload).status_code == 422
 
 
+def test_custom_template_is_validated_and_used_for_download(client):
+    document = prepared(client)["document"]
+    custom = client.get("/api/catalog").json()["templates"][0] | {
+        "id": "custom_editor_test",
+        "name": "Моё оформление",
+        "font": "Arial",
+        "font_size": 13,
+    }
+    response = client.post("/api/documents/download", json={
+        "document": document,
+        "template_id": custom["id"],
+        "custom_template": custom,
+    })
+    assert response.status_code == 200
+    generated = Document(BytesIO(response.content))
+    assert generated.styles["Normal"].font.name == "Arial"
+    assert generated.styles["Normal"].font.size.pt == 13
+
+
+def test_custom_template_id_must_match_selection(client):
+    document = prepared(client)["document"]
+    custom = client.get("/api/catalog").json()["templates"][0] | {
+        "id": "custom_editor_test",
+    }
+    response = client.post("/api/documents/download", json={
+        "document": document,
+        "template_id": "custom_another",
+        "custom_template": custom,
+    })
+    assert response.status_code == 422
+
+
 def test_processor_failure_is_explicit_and_prepared_document_can_still_download(client):
     document = prepared(client)["document"]
     with TestClient(create_app(Settings(text_processor="unavailable"))) as failing:

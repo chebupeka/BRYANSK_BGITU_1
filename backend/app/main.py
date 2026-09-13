@@ -198,9 +198,15 @@ def create_app(
     def download(request: DownloadRequest):
         """Render user-supplied content without calling the model or claiming fact verification."""
         doc_type = selected_type(request.document.doc_type, request.document.requisites)
-        template = templates().get(request.template_id)
+        template = request.custom_template or templates().get(request.template_id)
         if template is None:
             raise APIError(422, "unknown_template", "Неизвестный шаблон оформления.")
+        if template.id != request.template_id:
+            raise APIError(
+                422,
+                "unknown_template",
+                "Идентификатор пользовательского оформления не совпадает с выбранным.",
+            )
         content = renderer(request.document, doc_type, template)
         filename = f"{doc_type.id}-{template.id}.docx"
         return Response(

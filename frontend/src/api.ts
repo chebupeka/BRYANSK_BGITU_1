@@ -1,5 +1,5 @@
 import type {
-  ApiFailure, Catalog, DocumentContent, ErrorIssue, ProcessResult, ServiceStatus,
+  ApiFailure, Catalog, DocumentContent, ErrorIssue, ProcessResult, ServiceStatus, Template,
 } from './types';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -198,13 +198,15 @@ function filenameFrom(response: Response, fallback: string): string {
 }
 
 export async function downloadDocument(
-  document: DocumentContent, templateId: string,
+  document: DocumentContent, template: Template,
 ): Promise<string> {
+  const custom = template.id.startsWith('custom_') ? template : undefined;
   const response = await request('/documents/download', {
-    body: { document, template_id: templateId }, timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    body: { document, template_id: template.id, custom_template: custom },
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
   });
   const blob = await response!.blob();
-  const name = filenameFrom(response!, `${document.doc_type}-${templateId}.docx`);
+  const name = filenameFrom(response!, `${document.doc_type}-${template.id}.docx`);
   const url = URL.createObjectURL(blob);
   const link = window.document.createElement('a');
   link.href = url;
