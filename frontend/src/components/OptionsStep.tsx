@@ -1,5 +1,5 @@
-import { Button, Callout, Field } from './ui';
-import { ArrowLeft, ArrowRight, Check, Sparkle } from './icons';
+import { Button, Callout, Field, Spinner } from './ui';
+import { ArrowLeft, ArrowRight, Check } from './icons';
 import PagePreview from './PagePreview';
 import type { Catalog, DocumentContent, DocumentType, RequisiteField } from '../types';
 
@@ -11,14 +11,12 @@ interface Props {
   /** Requisite ids that were read out of the draft, not typed by hand. */
   suggested: string[];
   suggestBusy: boolean;
-  suggestSupported: boolean;
   preview: DocumentContent;
   busy: boolean;
   onType: (id: string) => void;
   onTemplate: (id: string) => void;
   onRequisite: (id: string, value: string) => void;
   onFocusField: (id: string | undefined) => void;
-  onSuggest: () => void;
   onBack: () => void;
   onPrepare: () => void;
 }
@@ -35,6 +33,10 @@ export default function OptionsStep(props: Props) {
   const missing = docType.fields.filter(
     field => field.required && !(requisites[field.id] ?? '').trim(),
   );
+  const unresolved = docType.fields.filter(field => !props.suggested.includes(field.id));
+  const parsedLabels = docType.fields
+    .filter(field => props.suggested.includes(field.id))
+    .map(field => field.label);
 
   return <section className="step-panel" aria-labelledby="step-options-title">
     <div className="step-head">
@@ -79,26 +81,25 @@ export default function OptionsStep(props: Props) {
       </button>)}
     </div>
 
-    <div className="group-title-row">
-      <h3 className="group-title">Реквизиты</h3>
-      {props.suggestSupported && <Button variant="quiet" size="md" loading={props.suggestBusy}
-        icon={<Sparkle size={16} />} onClick={props.onSuggest} disabled={props.busy}>
-        Заполнить из черновика
-      </Button>}
-    </div>
+    <h3 className="group-title">Реквизиты</h3>
     <p className="group-hint">
-      Поля со звёздочкой можно пропустить: на их месте появятся метки «Заполнить».
+      Показываем только то, чего не удалось найти в черновике. Поля со звёздочкой можно
+      пропустить: на их месте появятся метки «Заполнить».
     </p>
 
-    {props.suggested.length > 0 && <Callout tone="info" live="polite"
-      title={`Из черновика: ${docType.fields
-        .filter(field => props.suggested.includes(field.id))
-        .map(field => field.label).join(', ')}. Проверьте значения.`} />}
+    {props.suggestBusy && <div className="loading-block">
+      <Spinner label="Ищем реквизиты в черновике…" />
+    </div>}
 
-    <div className="requisites-grid">
-      {docType.fields.map(field => <Field key={field.id} id={`field-${field.id}`}
-        label={field.label} required={field.required} hint={hintFor(field)}
-        highlight={props.suggested.includes(field.id)}>
+    {!props.suggestBusy && parsedLabels.length > 0 && <Callout
+      tone={unresolved.length > 0 ? 'info' : 'success'} live="polite"
+      title={unresolved.length > 0
+        ? `Найдено в черновике: ${parsedLabels.join(', ')}`
+        : 'Все реквизиты заполнены автоматически из черновика.'} />}
+
+    {!props.suggestBusy && unresolved.length > 0 && <div className="requisites-grid">
+      {unresolved.map(field => <Field key={field.id} id={`field-${field.id}`}
+        label={field.label} required={field.required} hint={hintFor(field)}>
         <input id={`field-${field.id}`} className="input" type="text" maxLength={500}
           value={requisites[field.id] ?? ''} disabled={props.busy}
           autoComplete="off" spellCheck
@@ -106,9 +107,9 @@ export default function OptionsStep(props: Props) {
           onBlur={() => props.onFocusField(undefined)}
           onChange={event => props.onRequisite(field.id, event.target.value)} />
       </Field>)}
-    </div>
+    </div>}
 
-    {missing.length > 0 && <Callout tone="warn"
+    {!props.suggestBusy && missing.length > 0 && <Callout tone="warn"
       title={`Не заполнено: ${missing.map(field => field.label).join(', ')}`}>
       Можно продолжить — в документе останутся метки.
     </Callout>}
@@ -117,7 +118,8 @@ export default function OptionsStep(props: Props) {
       <Button variant="quiet" icon={<ArrowLeft size={18} />} onClick={props.onBack}
         disabled={props.busy}>К черновику</Button>
       <Button variant="primary" size="lg" loading={props.busy}
-        iconRight={<ArrowRight size={18} />} onClick={props.onPrepare}>
+        iconRight={<ArrowRight size={18} />} onClick={props.onPrepare}
+        disabled={props.suggestBusy}>
         Подготовить документ
       </Button>
       <span className="hotkey-hint">Ctrl + Enter — подготовить</span>

@@ -38,7 +38,7 @@ export default function App() {
   const [downloadedName, setDownloadedName] = useState('');
   const [saved, setSaved] = useState(true);
   const [suggested, setSuggested] = useState<string[]>([]);
-  const [suggestSupported, setSuggestSupported] = useState(true);
+  const [suggestedFor, setSuggestedFor] = useState('');
   const [suggestBusy, setSuggestBusy] = useState(false);
   const [focusId, setFocusId] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; tone: 'info' | 'success' | 'warn' } | null>(null);
@@ -48,10 +48,13 @@ export default function App() {
   // Which requisites came out of the draft rather than from the keyboard: only these are
   // dropped when the draft changes, so typed values survive an edit of the text.
   const autofilled = useRef<Record<string, string[]>>({});
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const waiting = useElapsedSeconds(busy === 'process');
 
   const docType = catalog?.doc_types.find(type => type.id === state.docType);
   const template = catalog?.templates.find(item => item.id === state.templateId);
+  const suggestionKey = `${state.docType}\u0000${docType?.fields.map(field => field.id).join(',') ?? ''}\u0000${state.draft}`;
   const requisites = useMemo(
     () => state.requisitesByType[state.docType] ?? {},
     [state.requisitesByType, state.docType],
@@ -115,6 +118,7 @@ export default function App() {
     });
     autofilled.current = {};
     setSuggested([]);
+    setSuggestedFor('');
     setResult(null);
     setFailure(null);
     setDownloadedName('');
@@ -136,50 +140,80 @@ export default function App() {
     setDownloadedName('');
   }
 
-  /** Values the person already wrote in their own draft, put into the empty fields. */
-  const fillFromDraft = useCallback(async (typeId: string, quiet = false) => {
-    if (!state.draft.trim()) return;
-    setSuggestBusy(true);
-    try {
-      const found = await suggestRequisites(state.draft, typeId);
-      if (found === null) {
-        setSuggestSupported(false);
-        if (!quiet) setToast({ message: 'Этот backend не разбирает черновик на реквизиты.', tone: 'info' });
-        return;
-      }
-      const current = state.requisitesByType[typeId] ?? {};
-      const added = Object.entries(found)
-        .filter(([id, value]) => value.trim() && !(current[id] ?? '').trim());
-      if (!added.length) {
-        if (!quiet) setToast({ message: 'В черновике не нашлось подписанных реквизитов.', tone: 'info' });
-        return;
-      }
-      autofilled.current[typeId] = [
-        ...(autofilled.current[typeId] ?? []), ...added.map(([id]) => id),
-      ];
-      setSuggested(added.map(([id]) => id));
-      setResult(null);
-      setState(previous => ({
-        ...previous,
-        requisitesByType: {
-          ...previous.requisitesByType,
-          [typeId]: { ...(previous.requisitesByType[typeId] ?? {}), ...Object.fromEntries(added) },
-        },
-      }));
-    } catch {
-      // The hint is optional: without it the form simply stays as the person left it.
-    } finally {
+  // Requisites are extracted whenever this step opens (including a direct page reload) or
+  // its document type changes. While the request is in flight the form waits, so it never
+  // flashes fields that are about to be filled and hidden.
+  useEffect(() => {
+    if (path !== '/options' || !state.draft.trim() || !catalog) {
       setSuggestBusy(false);
+      return;
     }
-  }, [state.draft, state.requisitesByType]);
+
+    const typeId = state.docType;
+    const type = catalog.doc_types.find(item => item.id === typeId);
+    if (!type) {
+      setSuggestBusy(false);
+      return;
+    }
+    const requestKey = `${typeId}\u0000${type.fields.map(field => field.id).join(',')}\u0000${state.draft}`;
+    if (suggestedFor === requestKey) {
+      setSuggestBusy(false);
+      return;
+    }
+
+    let active = true;
+    setSuggested([]);
+    setSuggestBusy(true);
+    setFocusId(undefined);
+
+    void suggestRequisites(state.draft, typeId).then(found => {
+      if (!active || found === null) return;
+      const fieldIds = new Set(type.fields.map(field => field.id));
+      const parsed = Object.entries(found)
+        .filter(([id, value]) => fieldIds.has(id) && value.trim());
+      setSuggested(parsed.map(([id]) => id));
+
+      const current = stateRef.current.requisitesByType[typeId] ?? {};
+      const added = parsed.filter(([id]) => !(current[id] ?? '').trim());
+      if (!added.length) return;
+
+      autofilled.current[typeId] = [
+        ...new Set([...(autofilled.current[typeId] ?? []), ...added.map(([id]) => id)]),
+      ];
+      setResult(null);
+      setState(previous => {
+        const fields = { ...(previous.requisitesByType[typeId] ?? {}) };
+        let changed = false;
+        for (const [id, value] of added) {
+          if ((fields[id] ?? '').trim()) continue;
+          fields[id] = value;
+          changed = true;
+        }
+        if (!changed) return previous;
+        return {
+          ...previous,
+          requisitesByType: { ...previous.requisitesByType, [typeId]: fields },
+        };
+      });
+    }).catch(() => {
+      // If automatic extraction is unavailable, every field remains visible for manual input.
+    }).finally(() => {
+      if (active) {
+        setSuggestedFor(requestKey);
+        setSuggestBusy(false);
+      }
+    });
+
+    return () => { active = false; };
+  }, [catalog, path, state.docType, state.draft, suggestedFor]);
 
   function goOptions() {
     navigate('/options');
-    void fillFromDraft(state.docType, true);
   }
 
   async function prepare() {
-    if (!docType || !state.draft.trim() || busy) return;
+    if (!docType || !state.draft.trim() || busy || suggestBusy
+      || suggestedFor !== suggestionKey) return;
     if (result) { navigate('/result'); return; }
     setBusy('process');
     setFailure(null);
@@ -339,19 +373,19 @@ export default function App() {
 
               {path === '/options' && <OptionsStep catalog={catalog} docType={docType}
                 templateId={state.templateId} requisites={requisites}
-                suggested={suggested} suggestBusy={suggestBusy} suggestSupported={suggestSupported}
+                suggested={suggested}
+                suggestBusy={suggestBusy || suggestedFor !== suggestionKey}
                 preview={previewContent} busy={busy !== null}
                 onType={typeId => {
                   setState(previous => ({ ...previous, docType: typeId }));
                   setResult(null);
                   setDownloadedName('');
                   setSuggested([]);
-                  void fillFromDraft(typeId, true);
+                  setSuggestedFor('');
                 }}
                 onTemplate={templateId => setState(previous => ({ ...previous, templateId }))}
                 onRequisite={changeRequisite}
                 onFocusField={setFocusId}
-                onSuggest={() => void fillFromDraft(state.docType)}
                 onBack={() => navigate('/draft')}
                 onPrepare={() => void prepare()} />}
 
