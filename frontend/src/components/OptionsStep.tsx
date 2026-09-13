@@ -116,8 +116,9 @@ export default function OptionsStep(props: Props) {
 
     <div className="step-actions">
       <Button variant="quiet" icon={<ArrowLeft size={18} />} onClick={props.onBack}
-        disabled={props.busy}>К черновику</Button>
+        data-document-action="back" disabled={props.busy}>К черновику</Button>
       <Button variant="primary" size="lg" loading={props.busy}
+        data-document-action="prepare"
         iconRight={<ArrowRight size={18} />} onClick={props.onPrepare}
         disabled={props.suggestBusy}>
         Подготовить документ

@@ -10,6 +10,7 @@ interface Props {
   draft: string;
   saved: boolean;
   busy: boolean;
+  canContinue: boolean;
   onDraft: (draft: string) => void;
   onSample: (draft: string, docType: string) => void;
   onNext: () => void;
@@ -19,7 +20,9 @@ function words(text: string): number {
   return (text.match(/[^\s]+/g) ?? []).length;
 }
 
-export default function DraftStep({ draft, saved, busy, onDraft, onSample, onNext }: Props) {
+export default function DraftStep({
+  draft, saved, busy, canContinue, onDraft, onSample, onNext,
+}: Props) {
   const [dragging, setDragging] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [fileError, setFileError] = useState('');
@@ -95,7 +98,8 @@ export default function DraftStep({ draft, saved, busy, onDraft, onSample, onNex
     {fileError && <Callout tone="warn" title={fileError} />}
 
     <div className="step-actions">
-      <Button variant="primary" size="lg" disabled={!draft.trim() || busy}
+      <Button variant="primary" size="lg" disabled={!canContinue || busy}
+        data-document-action="next"
         iconRight={<ArrowRight size={18} />} onClick={onNext}>
         Выбрать тип документа
       </Button>

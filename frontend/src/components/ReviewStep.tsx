@@ -66,7 +66,7 @@ export default function ReviewStep(props: Props) {
 
     <div className="step-actions">
       <Button variant="quiet" icon={<ArrowLeft size={18} />} onClick={props.onBack}
-        disabled={props.busy}>К реквизитам</Button>
+        data-document-action="back" disabled={props.busy}>К реквизитам</Button>
       <Button variant="primary" size="lg" loading={props.busy} icon={<Download size={18} />}
         data-document-action="download" disabled={!props.canDownload}
         onClick={props.onDownload}>Скачать DOCX</Button>

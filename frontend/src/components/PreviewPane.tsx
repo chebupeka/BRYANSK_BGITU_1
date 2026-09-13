@@ -34,11 +34,11 @@ export default function PreviewPane({
   onContentDraftChange, onContentChange, onTemplate, onFormattingChange, onFocusField,
 }: Props) {
   const [zoom, setZoom] = useState<'fit' | 'full'>('fit');
-  const [mode, setMode] = useState<EditorMode>('preview');
+  const [mode, setMode] = useState<EditorMode>('text');
   const [box, width] = useElementWidth<HTMLDivElement>();
   const tilt = usePointerTilt<HTMLDivElement>(3);
   const pageWidth = zoom === 'full' ? FULL_WIDTH_PX : Math.max(0, width);
-  const editable = prepared && Boolean(onContentChange);
+  const editable = Boolean(onContentChange);
 
   useEffect(() => {
     if (!editable) setMode('preview');
@@ -80,7 +80,7 @@ export default function PreviewPane({
       <div className="preview-controls">
         {editable && <Segmented label="Режим документа" value={mode} onChange={setMode} options={[
           { value: 'preview', label: 'Лист', title: 'Предпросмотр документа' },
-          { value: 'text', label: 'Текст', title: 'Редактировать текст перед скачиванием' },
+          { value: 'text', label: 'Текст', title: 'Редактировать текст прямо на листе' },
           { value: 'style', label: 'Оформление', title: 'Выбрать оформление документа' },
         ]} />}
         <Segmented label="Масштаб страницы" value={zoom} onChange={setZoom} options={[
@@ -189,7 +189,9 @@ export default function PreviewPane({
       <div className="preview-editor-head">
         <div>
           <h3 id="style-editor-title">Оформление</h3>
-          <p>Содержание не изменится, повторная обработка не нужна.</p>
+          <p>{prepared
+            ? 'Содержание не изменится, повторная обработка не нужна.'
+            : 'Выберите внешний вид документа до его подготовки.'}</p>
         </div>
       </div>
       <div className="editor-templates" role="radiogroup" aria-label="Оформление документа">
@@ -226,8 +228,8 @@ export default function PreviewPane({
 
     <p className="preview-note">
       {prepared
-        ? `${formattingCustomized ? 'Индивидуальное оформление' : 'Можно отредактировать перед скачиванием'} · шаблон «${template.name}»`
-        : 'Предварительный вид: абзацы взяты прямо из черновика. Подготовка уточнит текст.'}
+        ? `${formattingCustomized ? 'Индивидуальное оформление' : 'Редактирование доступно на листе'} · шаблон «${template.name}»`
+        : `Изменения на листе синхронизируются с черновиком и реквизитами · шаблон «${template.name}»`}
     </p>
   </aside>;
 }

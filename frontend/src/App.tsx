@@ -29,6 +29,10 @@ import type {
 const EMPTY_PAGE = ['Черновик пока пуст. Начните печатать — страница соберётся здесь.'];
 const STEP_ROUTES: Route[] = ['/draft', '/options', '/result'];
 
+function sameParagraphs(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((paragraph, index) => paragraph === right[index]);
+}
+
 export default function App() {
   const [state, setState] = useState(loadDraft);
   const [theme, setTheme] = useState<ThemeName>(loadTheme);
@@ -47,6 +51,7 @@ export default function App() {
   const [suggestBusy, setSuggestBusy] = useState(false);
   const [focusId, setFocusId] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<{ message: string; tone: 'info' | 'success' | 'warn' } | null>(null);
+  const [pendingBodyFilled, setPendingBodyFilled] = useState<boolean | null>(null);
 
   const { path, navigate, back, canGoBack } = useRouter();
 
@@ -79,8 +84,13 @@ export default function App() {
   const previewContent: DocumentContent = useMemo(() => {
     if (result) return result.document;
     const body = splitParagraphs(state.draft);
-    return { doc_type: state.docType, requisites, body: body.length ? body : EMPTY_PAGE };
-  }, [result, state.draft, state.docType, requisites]);
+    return {
+      doc_type: state.docType,
+      requisites,
+      // An empty editable sheet uses its own hint instead of turning the hint into document text.
+      body: body.length ? body : path === '/draft' ? [] : EMPTY_PAGE,
+    };
+  }, [result, state.draft, state.docType, requisites, path]);
 
   const reachable = result ? 2 : state.draft.trim() ? 1 : 0;
 
@@ -137,16 +147,17 @@ export default function App() {
     });
     autofilled.current = {};
     editedDocumentRef.current = null;
+    setPendingBodyFilled(null);
     setSuggested([]);
     setSuggestedFor('');
     setResult(null);
-    setFormatting(null);
     setFailure(null);
     setDownloadedName('');
   }
 
   function changeRequisite(id: string, value: string) {
     editedDocumentRef.current = null;
+    setPendingBodyFilled(null);
     autofilled.current[state.docType] = (autofilled.current[state.docType] ?? [])
       .filter(item => item !== id);
     setSuggested(previous => previous.filter(item => item !== id));
@@ -158,7 +169,6 @@ export default function App() {
       },
     }));
     setResult(null);
-    setFormatting(null);
     setFailure(null);
     setDownloadedName('');
   }
@@ -231,24 +241,35 @@ export default function App() {
   }, [catalog, path, state.docType, state.draft, suggestedFor]);
 
   function goOptions() {
+    const pending = editedDocumentRef.current;
+    if (pending && path === '/draft') editPreviewDocument(pending);
+    const hasBody = pending?.body.some(paragraph => paragraph.trim()) ?? Boolean(state.draft.trim());
+    if (!hasBody) return;
     navigate('/options');
   }
 
   async function prepare() {
-    if (!docType || !state.draft.trim() || busy || suggestBusy
-      || suggestedFor !== suggestionKey) return;
-    if (result) { navigate('/result'); return; }
+    const pending = path === '/options' ? editedDocumentRef.current : null;
+    const draft = pending ? pending.body.join('\n\n') : state.draft;
+    const activeRequisites = pending?.requisites ?? requisites;
+    const draftChangedOnSheet = Boolean(
+      pending && !sameParagraphs(pending.body, splitParagraphs(state.draft)),
+    );
+    if (!docType || !draft.trim() || busy || suggestBusy
+      || (!draftChangedOnSheet && suggestedFor !== suggestionKey)) return;
+    if (pending) editPreviewDocument(pending);
+    if (result && !pending) { navigate('/result'); return; }
     setBusy('process');
     setFailure(null);
     try {
       // Only fields of the current type cross the API boundary; other types stay local.
       const selected = Object.fromEntries(
-        docType.fields.map(field => [field.id, requisites[field.id] ?? '']),
+        docType.fields.map(field => [field.id, activeRequisites[field.id] ?? '']),
       );
-      const answer = await processDocument(state.draft, state.docType, selected);
+      const answer = await processDocument(draft, state.docType, selected);
       editedDocumentRef.current = null;
+      setPendingBodyFilled(null);
       setResult(answer.result);
-      setFormatting(null);
       setOutcome({ cache: answer.cache, elapsedMs: answer.elapsedMs });
       navigate('/result');
     } catch (error) {
@@ -308,6 +329,30 @@ export default function App() {
 
   function draftDocument(document: DocumentContent) {
     editedDocumentRef.current = document;
+    if (path !== '/result') {
+      const filled = document.body.some(paragraph => paragraph.trim());
+      setPendingBodyFilled(previous => previous === filled ? previous : filled);
+    }
+  }
+
+  function editPreviewDocument(document: DocumentContent) {
+    if (path === '/result') {
+      editDocument(document);
+      return;
+    }
+    const nextDraft = document.body.join('\n\n');
+    if (!sameParagraphs(document.body, splitParagraphs(state.draft))) {
+      changeDraft(nextDraft);
+      return;
+    }
+    const changed = docType?.fields.find(
+      field => (document.requisites[field.id] ?? '') !== (requisites[field.id] ?? ''),
+    );
+    if (changed) changeRequisite(changed.id, document.requisites[changed.id] ?? '');
+    else {
+      editedDocumentRef.current = null;
+      setPendingBodyFilled(null);
+    }
   }
 
   function editDocument(document: DocumentContent) {
@@ -353,7 +398,7 @@ export default function App() {
       key: 'enter',
       ctrl: true,
       run: () => {
-        if (path === '/draft' && state.draft.trim()) goOptions();
+        if (path === '/draft') goOptions();
         else if (path === '/options') void prepare();
         else if (path === '/result') void download();
         else if (path === '/' || path === '/catalog') navigate('/draft');
@@ -452,6 +497,7 @@ export default function App() {
 
             {catalog && docType && <>
               {path === '/draft' && <DraftStep draft={state.draft} saved={saved} busy={busy !== null}
+                canContinue={pendingBodyFilled ?? Boolean(state.draft.trim())}
                 onDraft={changeDraft}
                 onSample={(draft, typeId) => startDraft(draft, typeId)}
                 onNext={goOptions} />}
@@ -473,7 +519,11 @@ export default function App() {
                 onTemplate={changeResultTemplate}
                 onRequisite={changeRequisite}
                 onFocusField={setFocusId}
-                onBack={() => navigate('/draft')}
+                onBack={() => {
+                  const pending = editedDocumentRef.current;
+                  if (pending) editPreviewDocument(pending);
+                  navigate('/draft');
+                }}
                 onPrepare={() => void prepare()} />}
 
               {path === '/result' && result && <ReviewStep result={result} docType={docType}
@@ -487,7 +537,11 @@ export default function App() {
                   window.print();
                 }}
                 onCopy={() => void copyText()}
-                onBack={() => navigate('/options')} />}
+                onBack={() => {
+                  const document = editedDocumentRef.current;
+                  if (document) editDocument(document);
+                  navigate('/options');
+                }} />}
             </>}
 
             {notices}
@@ -495,13 +549,13 @@ export default function App() {
 
           {catalog && docType && previewTemplate && editorFormatting && <PreviewPane content={previewContent}
             docType={docType} template={previewTemplate} prepared={Boolean(result)} focusId={focusId}
-            templates={path === '/result' ? catalog.templates : undefined}
+            templates={catalog.templates}
             formatting={editorFormatting} formattingCustomized={formatting !== null}
             disabled={busy !== null}
-            onContentDraftChange={path === '/result' ? draftDocument : undefined}
-            onContentChange={path === '/result' ? editDocument : undefined}
-            onTemplate={path === '/result' ? changeResultTemplate : undefined}
-            onFormattingChange={path === '/result' ? changeFormatting : undefined}
+            onContentDraftChange={draftDocument}
+            onContentChange={editPreviewDocument}
+            onTemplate={changeResultTemplate}
+            onFormattingChange={changeFormatting}
             onFocusField={setFocusId} />}
         </div>
       </div>}
