@@ -1,18 +1,16 @@
 import { useState } from 'react';
 import { Badge, Button, Callout } from './ui';
 import { ArrowLeft, Check, Copy, Download, Print } from './icons';
-import type { DocumentType, ProcessResult, Template } from '../types';
+import type { DocumentType, ProcessResult } from '../types';
 
 interface Props {
   result: ProcessResult;
   docType: DocumentType;
-  templates: Template[];
-  templateId: string;
   busy: boolean;
+  canDownload: boolean;
   cache: string;
   elapsedMs: number;
   downloadedName: string;
-  onTemplate: (id: string) => void;
   onDownload: () => void;
   onPrint: () => void;
   onCopy: () => void;
@@ -32,7 +30,7 @@ export default function ReviewStep(props: Props) {
       <div>
         <p className="step-mark">Шаг 3</p>
         <h2 id="step-result-title">Готовый файл</h2>
-        <p className="step-lead">Справа — страница целиком. Тот же расчёт применяется к DOCX.</p>
+        <p className="step-lead">Справа можно проверить лист, поправить текст или сменить оформление перед скачиванием.</p>
       </div>
       <div className="result-stamps">
         {props.cache === 'HIT' && <Badge tone="neutral"
@@ -58,17 +56,10 @@ export default function ReviewStep(props: Props) {
       </ul>}
     </div>}
 
-    <h3 className="group-title">Оформление</h3>
-    <p className="group-hint">Содержание уже подготовлено — обработчик не вызывается повторно.</p>
-    <div className="template-switch" role="radiogroup" aria-label="Оформление документа">
-      {props.templates.map(template => <button key={template.id} type="button" role="radio"
-        aria-checked={template.id === props.templateId} disabled={props.busy}
-        className={`switch-item ${template.id === props.templateId ? 'is-selected' : ''}`}
-        onClick={() => props.onTemplate(template.id)}>
-        <strong>{template.name}</strong>
-        <small>{template.font} · {template.font_size} пт</small>
-      </button>)}
-    </div>
+    {!props.canDownload && <Callout tone="warn"
+      title="Основной текст документа пуст">
+      Откройте режим «Текст» справа и добавьте хотя бы один абзац.
+    </Callout>}
 
     {props.downloadedName && <Callout tone="success" live="polite"
       title={`Файл ${props.downloadedName} передан браузеру`} />}
@@ -77,11 +68,12 @@ export default function ReviewStep(props: Props) {
       <Button variant="quiet" icon={<ArrowLeft size={18} />} onClick={props.onBack}
         disabled={props.busy}>К реквизитам</Button>
       <Button variant="primary" size="lg" loading={props.busy} icon={<Download size={18} />}
+        data-document-action="download" disabled={!props.canDownload}
         onClick={props.onDownload}>Скачать DOCX</Button>
       <Button variant="quiet" icon={<Print size={18} />} onClick={props.onPrint}
-        disabled={props.busy}>Печать</Button>
+        data-document-action="print" disabled={props.busy}>Печать</Button>
       <Button variant="quiet" icon={<Copy size={18} />} onClick={props.onCopy}
-        disabled={props.busy}>Скопировать текст</Button>
+        data-document-action="copy" disabled={props.busy}>Скопировать текст</Button>
       <span className="hotkey-hint">Ctrl + S — скачать</span>
     </div>
   </section>;

@@ -14,14 +14,16 @@ import { Refresh } from './components/icons';
 import HomePage from './pages/HomePage';
 import CatalogPage from './pages/CatalogPage';
 import { useElapsedSeconds, useHotkeys } from './lib/hooks';
-import { arrangeBlocks, splitParagraphs } from './lib/layout';
+import {
+  arrangeBlocks, formattingForTemplate, missingRequired, splitParagraphs,
+} from './lib/layout';
 import { DEMO_REQUISITES, SAMPLES, sampleFor } from './lib/samples';
 import { useRouter, type Route } from './router';
 import {
   loadCustomTemplates, loadDraft, loadTheme, saveCustomTemplates, saveDraft, saveTheme,
 } from './storage';
 import type {
-  ApiFailure, Catalog, DocumentContent, ProcessResult, ServiceStatus, ThemeName,
+  ApiFailure, Catalog, DocumentContent, DocumentFormatting, ProcessResult, ServiceStatus, ThemeName,
 } from './types';
 
 const EMPTY_PAGE = ['Черновик пока пуст. Начните печатать — страница соберётся здесь.'];
@@ -34,6 +36,7 @@ export default function App() {
   const [catalogFailure, setCatalogFailure] = useState<ApiFailure | null>(null);
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
+  const [formatting, setFormatting] = useState<DocumentFormatting | null>(null);
   const [outcome, setOutcome] = useState({ cache: '', elapsedMs: 0 });
   const [busy, setBusy] = useState<'process' | 'download' | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -50,12 +53,23 @@ export default function App() {
   // Which requisites came out of the draft rather than from the keyboard: only these are
   // dropped when the draft changes, so typed values survive an edit of the text.
   const autofilled = useRef<Record<string, string[]>>({});
+  // contentEditable owns the live DOM while the user is typing. Keep its newest value
+  // outside React state so clicking Download cannot lose the last keystroke on blur.
+  const editedDocumentRef = useRef<DocumentContent | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const waiting = useElapsedSeconds(busy === 'process');
 
   const docType = catalog?.doc_types.find(type => type.id === state.docType);
   const template = catalog?.templates.find(item => item.id === state.templateId);
+  const editorFormatting = useMemo(
+    () => template ? formatting ?? formattingForTemplate(template) : null,
+    [formatting, template],
+  );
+  const previewTemplate = useMemo(
+    () => template && formatting ? { ...template, ...formatting } : template,
+    [formatting, template],
+  );
   const suggestionKey = `${state.docType}\u0000${docType?.fields.map(field => field.id).join(',') ?? ''}\u0000${state.draft}`;
   const requisites = useMemo(
     () => state.requisitesByType[state.docType] ?? {},
@@ -122,14 +136,17 @@ export default function App() {
       return { ...previous, draft, requisitesByType };
     });
     autofilled.current = {};
+    editedDocumentRef.current = null;
     setSuggested([]);
     setSuggestedFor('');
     setResult(null);
+    setFormatting(null);
     setFailure(null);
     setDownloadedName('');
   }
 
   function changeRequisite(id: string, value: string) {
+    editedDocumentRef.current = null;
     autofilled.current[state.docType] = (autofilled.current[state.docType] ?? [])
       .filter(item => item !== id);
     setSuggested(previous => previous.filter(item => item !== id));
@@ -141,6 +158,7 @@ export default function App() {
       },
     }));
     setResult(null);
+    setFormatting(null);
     setFailure(null);
     setDownloadedName('');
   }
@@ -228,7 +246,9 @@ export default function App() {
         docType.fields.map(field => [field.id, requisites[field.id] ?? '']),
       );
       const answer = await processDocument(state.draft, state.docType, selected);
+      editedDocumentRef.current = null;
       setResult(answer.result);
+      setFormatting(null);
       setOutcome({ cache: answer.cache, elapsedMs: answer.elapsedMs });
       navigate('/result');
     } catch (error) {
@@ -240,11 +260,19 @@ export default function App() {
 
   async function download() {
     if (!result || !template || busy) return;
+    const document = editedDocumentRef.current ?? result.document;
+    if (!document.body.some(paragraph => paragraph.trim())) {
+      editDocument(document);
+      return;
+    }
+    if (editedDocumentRef.current) syncEditedDocument(document);
     setBusy('download');
     setFailure(null);
     setDownloadedName('');
     try {
-      setDownloadedName(await downloadDocument(result.document, template));
+      setDownloadedName(await downloadDocument(
+        document, template, formatting ?? undefined,
+      ));
     } catch (error) {
       setFailure(asFailure(error));
     } finally {
@@ -254,18 +282,51 @@ export default function App() {
 
   async function copyText() {
     if (!docType) return;
-    const lines = arrangeBlocks(previewContent, docType).flatMap(block => {
+    const document = editedDocumentRef.current ?? previewContent;
+    const lines = arrangeBlocks(document, docType).flatMap(block => {
       if (block.kind === 'title') return [docType.title];
-      if (block.kind === 'body') return previewContent.body;
+      if (block.kind === 'body') return document.body;
       return block.items.map(item => block.kind === 'labeled'
         ? `${item.field.label}: ${item.text}` : item.text);
     });
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
+      if (editedDocumentRef.current) syncEditedDocument(document);
       setToast({ message: 'Текст документа скопирован.', tone: 'success' });
     } catch {
       setToast({ message: 'Браузер не дал доступ к буферу обмена.', tone: 'warn' });
     }
+  }
+
+  function syncEditedDocument(document: DocumentContent) {
+    setResult(previous => previous ? {
+      ...previous,
+      document,
+      missing_fields: docType ? missingRequired(document, docType) : previous.missing_fields,
+    } : previous);
+  }
+
+  function draftDocument(document: DocumentContent) {
+    editedDocumentRef.current = document;
+  }
+
+  function editDocument(document: DocumentContent) {
+    editedDocumentRef.current = document;
+    syncEditedDocument(document);
+    setDownloadedName('');
+    setFailure(null);
+  }
+
+  function changeResultTemplate(templateId: string) {
+    setState(previous => ({ ...previous, templateId }));
+    setFormatting(null);
+    setDownloadedName('');
+  }
+
+  function changeFormatting(next: DocumentFormatting | null) {
+    setFormatting(next);
+    setDownloadedName('');
+    setFailure(null);
   }
 
   function startDraft(draft: string, docTypeId: string) {
@@ -356,10 +417,15 @@ export default function App() {
         ? <CatalogPage catalog={catalog} docTypeId={state.docType} templateId={state.templateId}
           sample={catalogSample}
           onPick={typeId => {
+            editedDocumentRef.current = null;
             setState(previous => ({ ...previous, docType: typeId }));
             setResult(null);
+            setFormatting(null);
           }}
-          onTemplate={templateId => setState(previous => ({ ...previous, templateId }))}
+          onTemplate={templateId => {
+            setState(previous => ({ ...previous, templateId }));
+            setFormatting(null);
+          }}
           onCreateTemplate={created => {
             setCatalog(previous => {
               if (!previous) return previous;
@@ -396,24 +462,30 @@ export default function App() {
                 suggestBusy={suggestBusy || suggestedFor !== suggestionKey}
                 preview={previewContent} busy={busy !== null}
                 onType={typeId => {
+                  editedDocumentRef.current = null;
                   setState(previous => ({ ...previous, docType: typeId }));
                   setResult(null);
+                  setFormatting(null);
                   setDownloadedName('');
                   setSuggested([]);
                   setSuggestedFor('');
                 }}
-                onTemplate={templateId => setState(previous => ({ ...previous, templateId }))}
+                onTemplate={changeResultTemplate}
                 onRequisite={changeRequisite}
                 onFocusField={setFocusId}
                 onBack={() => navigate('/draft')}
                 onPrepare={() => void prepare()} />}
 
               {path === '/result' && result && <ReviewStep result={result} docType={docType}
-                templates={catalog.templates} templateId={state.templateId} busy={busy !== null}
+                busy={busy !== null}
+                canDownload={result.document.body.some(paragraph => paragraph.trim())}
                 cache={outcome.cache} elapsedMs={outcome.elapsedMs} downloadedName={downloadedName}
-                onTemplate={templateId => setState(previous => ({ ...previous, templateId }))}
                 onDownload={() => void download()}
-                onPrint={() => window.print()}
+                onPrint={() => {
+                  const document = editedDocumentRef.current;
+                  if (document) syncEditedDocument(document);
+                  window.print();
+                }}
                 onCopy={() => void copyText()}
                 onBack={() => navigate('/options')} />}
             </>}
@@ -421,8 +493,16 @@ export default function App() {
             {notices}
           </div>
 
-          {catalog && docType && template && <PreviewPane content={previewContent}
-            docType={docType} template={template} prepared={Boolean(result)} focusId={focusId} />}
+          {catalog && docType && previewTemplate && editorFormatting && <PreviewPane content={previewContent}
+            docType={docType} template={previewTemplate} prepared={Boolean(result)} focusId={focusId}
+            templates={path === '/result' ? catalog.templates : undefined}
+            formatting={editorFormatting} formattingCustomized={formatting !== null}
+            disabled={busy !== null}
+            onContentDraftChange={path === '/result' ? draftDocument : undefined}
+            onContentChange={path === '/result' ? editDocument : undefined}
+            onTemplate={path === '/result' ? changeResultTemplate : undefined}
+            onFormattingChange={path === '/result' ? changeFormatting : undefined}
+            onFocusField={setFocusId} />}
         </div>
       </div>}
     </main>

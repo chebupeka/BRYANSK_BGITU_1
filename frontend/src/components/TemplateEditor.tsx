@@ -52,6 +52,9 @@ function initialTemplate(): Template {
     letterhead_alignment: 'center',
     headline_alignment: 'left',
     headline_bold: false,
+    body_bold: false,
+    body_italic: false,
+    body_underline: false,
     addressee_width_mm: 80,
     small_font_size: 10,
   };

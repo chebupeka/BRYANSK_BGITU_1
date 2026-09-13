@@ -79,6 +79,22 @@ export const Layers = (props: IconProps) => <Svg {...props}>
   <path d="M12 4l8 4.5-8 4.5-8-4.5zM4 13l8 4.5 8-4.5" />
 </Svg>;
 
+export const AlignLeft = (props: IconProps) => <Svg {...props}>
+  <path d="M4 6h16M4 10h11M4 14h16M4 18h9" />
+</Svg>;
+
+export const AlignCenter = (props: IconProps) => <Svg {...props}>
+  <path d="M4 6h16M6.5 10h11M4 14h16M7.5 18h9" />
+</Svg>;
+
+export const AlignRight = (props: IconProps) => <Svg {...props}>
+  <path d="M4 6h16M9 10h11M4 14h16M11 18h9" />
+</Svg>;
+
+export const AlignJustify = (props: IconProps) => <Svg {...props}>
+  <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+</Svg>;
+
 export const Bolt = (props: IconProps) => <Svg {...props}>
   <path d="M13 3L5.5 13.5H11L10 21l7.5-10.5H12z" />
 </Svg>;

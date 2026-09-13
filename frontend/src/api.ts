@@ -1,5 +1,6 @@
 import type {
-  ApiFailure, Catalog, DocumentContent, ErrorIssue, ProcessResult, ServiceStatus, Template,
+  ApiFailure, Catalog, DocumentContent, DocumentFormatting, ErrorIssue, ProcessResult, ServiceStatus,
+  Template,
 } from './types';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -198,11 +199,13 @@ function filenameFrom(response: Response, fallback: string): string {
 }
 
 export async function downloadDocument(
-  document: DocumentContent, template: Template,
+  document: DocumentContent, template: Template, formatting?: DocumentFormatting,
 ): Promise<string> {
   const custom = template.id.startsWith('custom_') ? template : undefined;
   const response = await request('/documents/download', {
-    body: { document, template_id: template.id, custom_template: custom },
+    body: {
+      document, template_id: template.id, custom_template: custom, formatting,
+    },
     timeoutMs: DOWNLOAD_TIMEOUT_MS,
   });
   const blob = await response!.blob();

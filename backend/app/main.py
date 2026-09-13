@@ -207,6 +207,10 @@ def create_app(
                 "unknown_template",
                 "Идентификатор пользовательского оформления не совпадает с выбранным.",
             )
+        if request.formatting is not None:
+            # The base template still owns structural choices (headers, tables and margins),
+            # while the editor may safely override presentation of the main text.
+            template = template.model_copy(update=request.formatting.model_dump())
         content = renderer(request.document, doc_type, template)
         filename = f"{doc_type.id}-{template.id}.docx"
         return Response(

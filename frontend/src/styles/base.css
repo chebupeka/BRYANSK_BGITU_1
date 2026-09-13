@@ -1,5 +1,17 @@
 *, *::before, *::after { box-sizing: border-box; }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html, body { margin: 0; padding: 0; }
 
 html {
@@ -113,7 +125,8 @@ body::after {
 
 /* Printing gives the page alone, at its real size. */
 @media print {
-  .app-header, .hero, .studio-main, .app-footer, .preview-head, .preview-note, .toast,
+  .app-header, .hero, .studio-main, .app-footer, .preview-head, .preview-editor, .inline-editor-bar,
+  .preview-note, .toast,
   .skip-link { display: none !important; }
   html, body { background: #fff; }
   .studio, .studio-grid, .view-studio, .preview-pane, .preview-stage { display: block; padding: 0 !important; margin: 0; }
