@@ -19,6 +19,14 @@ DATE_ONLY_LINE = re.compile(
     rf"^[\s>*•·-]*({DATE.pattern})\s*(?:г\.?|года)?\s*$", re.IGNORECASE
 )
 ATTACHMENT_LINE = re.compile(r"^[\s>*•·-]*приложени[ея]\s+(\S.*?)\s*$", re.IGNORECASE)
+# «Приложение не открывается на телефоне», «Приложения нет» — обычные фразы, поэтому без
+# разделителя приложение берётся, только если значение — объём: «на 2 листах», «на 3 л.
+# в 2 экз.». Описание приложения («смета на 2 л.») пишется через двоеточие или тире.
+ATTACHMENT_VALUE = re.compile(
+    r"(?:на\s+)?\d+\s*(?:л\.?|лист(?:ах|е|а|ов)?)"
+    r"(?:\s*,?\s*в\s+\d+\s*(?:экз\.?|экземпляр(?:ах|е|а|ов)?))?\.?",
+    re.IGNORECASE,
+)
 INITIAL_AT_END = re.compile(r"\b[А-ЯЁA-Z]\.$")
 
 # Метка без разделителя: «Дата 12.03.2025», «Номер 47-СЗ». В обычной фразе те же слова
@@ -191,8 +199,12 @@ def usual_value(line: str, fields: set[str]) -> tuple[str, str] | None:
         return "number", clean_value(match.group(1))
     if "date" in fields and (match := DATE_ONLY_LINE.match(line)):
         return "date", clean_value(match.group(1))
-    if "attachment" in fields and (match := ATTACHMENT_LINE.match(line)):
-        # Слово «Приложение» добавит генератор, в значении остаётся только описание.
+    if (
+        "attachment" in fields
+        and (match := ATTACHMENT_LINE.match(line))
+        and ATTACHMENT_VALUE.fullmatch(match.group(1))
+    ):
+        # Слово «Приложение» добавит генератор, в значении остаётся только объём.
         return "attachment", clean_value(match.group(1))
     return None
 
