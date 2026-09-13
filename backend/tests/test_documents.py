@@ -174,8 +174,12 @@ def test_editor_formatting_reaches_the_downloaded_docx(client):
     assert rendered.styles["Normal"].paragraph_format.line_spacing == 2
     assert rendered.styles["Normal"].paragraph_format.space_after.pt == 12
     assert all(paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER for paragraph in body)
-    assert all(abs(paragraph.paragraph_format.first_line_indent - Mm(15)) < Mm(0.1) for paragraph in body)
-    assert all(run.bold and run.italic and run.underline for paragraph in body for run in paragraph.runs)
+    assert all(
+        abs(paragraph.paragraph_format.first_line_indent - Mm(15)) < Mm(0.1) for paragraph in body
+    )
+    assert all(
+        run.bold and run.italic and run.underline for paragraph in body for run in paragraph.runs
+    )
 
 
 @pytest.mark.parametrize("template_id", list(templates()))
