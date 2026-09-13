@@ -20,7 +20,7 @@
 Выберите удобный формат, чтобы быстро познакомиться с проектом:
 
 - [Смотреть видео-презентацию](https://disk.yandex.ru/i/gEjXfb2RI-ojUQ) — краткий обзор работы сервиса.
-- [Открыть PDF-презентацию](https://github.com/chebupeka/BRYANSK_BGITU_1/blob/main/docs/presentation/presentation.pdf) — описание решения и ключевых возможностей в слайдах.
+- [docs/presentation/presentation.pdf](https://github.com/chebupeka/BRYANSK_BGITU_1/blob/main/docs/presentation/presentation.pdf)
 
 ## Содержание
 
