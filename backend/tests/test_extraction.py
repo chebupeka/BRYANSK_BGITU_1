@@ -195,19 +195,21 @@ def test_each_way_of_writing_a_label_gives_the_requisite(
     separator, label, value, field_id, expected,
 ):
     line = f"{label}{separator}{value}"
-    draft = f"{line}\nПрошу согласовать закупку."
+    draft = f"От кого: инженер Петров П.П.\n{line}\n\nПрошу согласовать закупку."
     doc_type = document_types()["service_memo"]
 
-    assert suggest_requisites(draft, doc_type) == {field_id: expected}
+    assert suggest_requisites(draft, doc_type) == {
+        "sender": "инженер Петров П.П.", field_id: expected,
+    }
     assert body_lines(draft.splitlines(), doc_type) == ["Прошу согласовать закупку."]
 
 
 @pytest.mark.parametrize(("line", "found"), [
     ("Дата 11 сентября 2026 года", {"date": "11 сентября 2026"}),
     ("Номер № 12-45 от 11.09.2026", {"number": "12-45", "date": "11.09.2026"}),
+    ("Номер 01-12/345", {"number": "01-12/345"}),
     ("Подписант П. П. Петров", {"signer": "П. П. Петров"}),
     ("ПОДПИСЬ Николаева Н.Н.", {"signer": "Николаева Н.Н."}),
-    ("Тема Про ремонт кабинета 204", {"subject": "Про ремонт кабинета 204"}),
 ])
 def test_unseparated_label_accepts_usual_forms_of_the_value(line, found):
     assert suggest(line + "\nПрошу согласовать закупку.") == found
@@ -218,7 +220,59 @@ def test_unseparated_outgoing_number_of_a_letter():
     assert suggest(draft, "letter") == {"number": "88-П"}
 
 
-@pytest.mark.parametrize("line", [
+def test_unseparated_subject_is_taken_from_the_header_block():
+    """Шапка письма: «От кого» у письма не поле, но строка шапки, а не текст."""
+    draft = (
+        "Кому: генеральному директору ООО Василёк Фёдорову Ф.Ф.\n"
+        "От кого: генеральный директор ООО Ромашка Иванов И.И.\n"
+        "Дата 16.03.2025\n"
+        "Номер 88-П\n"
+        "Тема О сотрудничестве в сфере поставок\n"
+        "\n"
+        "Мы хотим заключить с вами договор на поставку мебели.\n"
+        "\n"
+        "Подпись Иванов."
+    )
+    doc_type = document_types()["letter"]
+
+    assert suggest_requisites(draft, doc_type) == {
+        "recipient": "генеральному директору ООО Василёк Фёдорову Ф.Ф.",
+        "date": "16.03.2025",
+        "number": "88-П",
+        "subject": "О сотрудничестве в сфере поставок",
+        "signer": "Иванов",
+    }
+    assert body_lines(draft.splitlines(), doc_type) == [
+        "От кого: генеральный директор ООО Ромашка Иванов И.И.",
+        "Мы хотим заключить с вами договор на поставку мебели.",
+    ]
+
+
+@pytest.mark.parametrize("draft", [
+    "Прошу согласовать закупку.\nТема О закупке офисной техники\n\nСрок — неделя.",
+    "Тема О закупке офисной техники\nПрошу согласовать закупку.",
+], ids=["after-text", "text-right-below"])
+def test_unseparated_subject_outside_the_header_is_left_in_the_text(draft):
+    assert suggest(draft) == {}
+
+
+def test_unseparated_heading_starts_with_o_or_ob():
+    """«Про» в заголовке делового документа не пишут: без разделителя это не тема."""
+    header = "Дата: 12.03.2025\n{}\n\nПрошу отремонтировать кабинет."
+    assert suggest(header.format("Тема Про ремонт кабинета 204")) == {"date": "12.03.2025"}
+    assert suggest(header.format("Тема: Про ремонт кабинета 204"))["subject"] == (
+        "Про ремонт кабинета 204"
+    )
+
+
+def test_bare_surname_needs_the_same_person_with_initials():
+    closing = "{}\n\nПрошу согласовать закупку.\n\nПодпись Петров."
+    assert suggest(closing.format("От кого: инженер Петров П.П."))["signer"] == "Петров"
+    assert "signer" not in suggest(closing.format("От кого: инженер Петрова П.П."))
+    assert "signer" not in suggest(closing.format("От кого: инженер Сидоров С.С."))
+
+
+PROSE_LINES = [
     "От этого зависит срок поставки",
     "Дата поставки пока не известна",
     "Тема встречи обсуждалась вчера",
@@ -228,20 +282,50 @@ def test_unseparated_outgoing_number_of_a_letter():
     "Номер 2 в очереди — отдел продаж",
     "Дата поставки 25.09.2026",
     "Номер телефона 8-900-000-00-00",
+    "Номер 8-900-000-00-00",
     "Номер 12 45",
+    "Номер 1-й",
+    "Номер 1-Й",
+    "Номер 2.",
     "Тема о закупке обсуждалась вчера",
     "Тема О закупке обсуждалась вчера. Решения нет",
+    "Тема Об этом поговорим на планёрке",
+    "Тема О закупке обсудим завтра",
+    "Тема Про отпуск закрыта",
+    "Тема О том, что склад протекает, поднималась трижды",
+    "Тема О поставке забыли",
+    "Заголовок О чём писать, пока не решили",
+    "Заголовок Об отчёте придумаем позже",
+    "ТЕМА О ЗАКУПКЕ ОБСУЖДАЛАСЬ ВЧЕРА",
     "Заголовок статьи уже придумали",
     "Подпись Отсутствует",
+    "Подпись Один",
+    "Подпись Женская",
+    "Подпись Петрович",
     "Подпись директора обязательна",
     "Подписант Петров поставит подпись завтра",
-])
-def test_prose_starting_with_a_label_word_is_not_a_requisite(line):
-    draft = f"{line}\nПрошу согласовать закупку."
-    doc_type = document_types()["service_memo"]
+]
+# Одна и та же строка в разных местах черновика: перед текстом, в шапке после реквизитов
+# (с человеком «Петров П.П.», чтобы проверить и фамилию без инициалов) и последней строкой.
+PLACEMENTS = {
+    "before-text": "{line}\nПрошу согласовать закупку.",
+    "header": (
+        "От кого: инженер Петров П.П.\nДата: 12.03.2025\n{line}\n\nПрошу согласовать закупку."
+    ),
+    "closing": "От кого: инженер Петров П.П.\n\nПрошу согласовать закупку.\n\n{line}",
+}
 
-    assert suggest_requisites(draft, doc_type) == {}
-    assert body_lines(draft.splitlines(), doc_type) == draft.splitlines(), (
+
+@pytest.mark.parametrize("placement", list(PLACEMENTS))
+@pytest.mark.parametrize("type_id", ["service_memo", "report_memo", "information_note", "letter"])
+@pytest.mark.parametrize("line", PROSE_LINES)
+def test_prose_starting_with_a_label_word_is_not_a_requisite(line, type_id, placement):
+    draft = PLACEMENTS[placement].format(line=line)
+    without_line = "\n".join(row for row in draft.splitlines() if row != line)
+    doc_type = document_types()[type_id]
+
+    assert suggest_requisites(draft, doc_type) == suggest_requisites(without_line, doc_type)
+    assert line in body_lines(draft.splitlines(), doc_type), (
         "строка без извлечённого реквизита остаётся в тексте"
     )
 
